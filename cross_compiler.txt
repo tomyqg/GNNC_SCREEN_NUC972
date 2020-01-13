@@ -1,0 +1,1 @@
+cross_compiler_prefix = arm-none-linux-gnueabi-
