@@ -56,15 +56,17 @@ uint8_t par_set_uart_mode(unsigned char mode);
 /*设置MQTT IP*/
 int par_set_mqtt_server(char *ip_addr);
 /*设置MQTT client id*/
-int par_set_mqtt_clent_id(char *id);
+int par_set_mqtt_client_id(char *id);
 /*设置MQTT user*/
-int par_set_mqtt_clent_user(char *user);
+int par_set_mqtt_client_user(char *user);
 /*设置MQTT user key*/
-int par_set_mqtt_clent_key(char *key);
+int par_set_mqtt_client_key(char *key);
 /*设置MQTT user subtopic*/
-int par_set_mqtt_clent_sub(char *subtopic);
+int par_set_mqtt_client_sub(char *subtopic);
 /*设置MQTT user pubtopic*/
-int par_set_mqtt_clent_pub(char *pubtopic);
+int par_set_mqtt_client_pub(char *pubtopic);
+/*设置MQTT report cycle*/
+int par_set_mqtt_report_cycle(uint16_t cycle ,uint8_t channel_num);
 
 /*设置TCP IP*/
 int pat_set_tcp_server(char *ip_addr);

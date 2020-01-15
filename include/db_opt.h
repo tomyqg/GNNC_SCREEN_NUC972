@@ -16,8 +16,8 @@ extern "C" {
 #define RECORD_DELAY_S         	   2U //每通道记录延时2s
 #define MAX_RECORD_MESSAGE_NUM (MAX_DB_TIME_COUNT*60/RECORD_DELAY_S) //最大记录消息数720*60/2
 
-
 typedef void (*pquery)(char** pr , int row , int column );
+
 typedef struct db_device
 {
 	uint16_t device_count_num;//每个通道设备记录数目　　０－９
@@ -29,6 +29,7 @@ typedef struct db_device
 	long long average_value;//每个通道设备记录的平均值
 	int device_state;//每个通道设备状态
 	long int running_time;//每个通道设备运行时间
+	int read_data_time;//每个通道查询时间设置
 	long long device_id_H;//每个通道设备唯一ID高８字节
 	long long device_id_L;//每个通道设备唯一ID低８字节
 }db_device_tab_t;
@@ -38,6 +39,9 @@ extern db_device_tab_t gnnc_device_v_info[];
 extern const char* device_tab_name_list[];
 
 void init_database(void);
+
+/*表中通道，准备支持所有通道设备集中在一张表中，提供查询筛选*/
+
 //数据记录
 int record_insert(const char* device_tab_name,int channel ,long int timestamp ,db_device_tab_t *device_tab);
 

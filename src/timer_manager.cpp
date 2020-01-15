@@ -137,7 +137,6 @@ void c_timer_task_opt::add_timer_task(c_timer_manager_t &timer_stuct)
 	std::cout << "添加后向量数目：";
 	std::cout << c_timer_manager_dynamic.size();
 	std::cout << "\n";
-	std::cout << c_timer_manager_dynamic.at(0).interval_seconds;
 }
 /*获取任务线程id
  *

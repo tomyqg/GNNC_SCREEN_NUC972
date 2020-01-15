@@ -62,6 +62,7 @@ void* usart10_rx_start(void* data);
 uint8_t switch_running_mode(uint8_t mode);
 
 
+
 #ifdef __cplusplus //使用ｃ编译
 }
 #endif

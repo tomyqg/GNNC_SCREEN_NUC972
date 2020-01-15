@@ -26,7 +26,7 @@ static void broker_rw_message(int channel,uint8_t *ptr,uint16_t msglen);
 static uint8_t get_end_point(int fd);
 
 
-#define MAX_REG_COUNT 					13U//定义最大寄存器处理数量
+#define MAX_REG_COUNT 					21U//定义最大寄存器处理数量
 
 pthread_mutex_t GNNC_Decode_mutex_lock = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t GNNC_Decode_cond = PTHREAD_COND_INITIALIZER;
@@ -41,7 +41,7 @@ modbus_master_rec_t self_analysis_temp;//数据解析打包发送至处理函数
 static int Check_Modbus_Addr(uint16_t Reg_start_addr);
 static void rec_slave_data(modbus_master_rec_t *rec_struct ,uint8_t len);
 static void rec_master_data(modbus_master_rec_t *rec_struct ,uint16_t reg_begin_addr ,uint16_t len);
-static void rec_master_data_ack(uint8_t *msg ,uint16_t len);
+
 /*处理函数*/
 static uint16_t Real_Time_Consistence_Int_Get(void *data);
 static uint16_t Gas_Ad_Value_Get(void *data);
@@ -53,11 +53,19 @@ static uint16_t Cpu_Id_5_Get(void *data);
 static uint16_t Cpu_Id_6_Get(void *data);
 static uint16_t Running_Sec_H_Get(void *data);
 static uint16_t Running_Sec_L_Get(void *data);
+static uint16_t Set_Read_Data_Time_H(void *data);
+static uint16_t Set_Read_Data_Time_L(void *data);
 static uint16_t Read_Data_From_Db_Get(void *data);
 static uint16_t Set_Uart_Mode(void *data);
+static uint16_t Set_Report_Cycle(void *data);
+static uint16_t Set_Mqtt_Server_H(void *data);
+static uint16_t Set_Mqtt_Server_L(void *data);
+static uint16_t Set_Tcp_Server_H(void *data);
+static uint16_t Set_Tcp_Server_L(void *data);
+static uint16_t Set_Tcp_Port(void *data);
 static uint16_t Unused_Ack(void *data);
 
-static int Ret_master_Read_Ack(void);
+static int Ret_master_Read_Ack(uint16_t channel);
 
 /*轮寻信号 标志*/
 polling_msg_t polling_msg[UART_NUM_MAX+1];
@@ -97,7 +105,15 @@ modbus_process_t reg_process_map[MAX_REG_COUNT] =
 	{RUNNING_SECONDS_H ,Running_Sec_H_Get},
 	{RUNNING_SECONDS_L ,Running_Sec_L_Get},
 	{READ_DATA_FROM_DB ,Read_Data_From_Db_Get},
+	{SET_READ_DATA_TIME_H ,Set_Read_Data_Time_H},
+	{SET_READ_DATA_TIME_L ,Set_Read_Data_Time_L},
 	{SET_UART_MODE ,Set_Uart_Mode},
+	{SET_REPORT_CYCLE ,Set_Report_Cycle},
+	{SET_MQTT_SERVER_H ,Set_Mqtt_Server_H},
+	{SET_MQTT_SERVER_L ,Set_Mqtt_Server_L},
+	{SET_TCP_SERVER_H ,Set_Tcp_Server_H},
+	{SET_TCP_SERVER_L ,Set_Tcp_Server_L},
+	{SET_TCP_PORT ,Set_Tcp_Port},
 	{0xFFFF,Unused_Ack}
 };
 
@@ -139,6 +155,7 @@ static uint16_t Gas_Ad_Value_Get(void *data)
 	static uint16_t device_record_count[UART_NUM_MAX+1] = {0};
 	struct tm *p_tm;
 	time_t timestamp;
+	//经过的秒数
 	timestamp = time((time_t *) NULL);
 	p_tm = localtime(&timestamp);
 	printf( "AD值记录时间:%02d-%02d-%02d-%02d-%02d\n", p_tm->tm_year + 1900,
@@ -147,15 +164,16 @@ static uint16_t Gas_Ad_Value_Get(void *data)
 	gnnc_device_v_info[temp_data->channnel].device_state = 1;
 	//录入当前值
 	gnnc_device_v_info[temp_data->channnel].current_value_H = 0;
-	gnnc_device_v_info[temp_data->channnel].current_value_L = temp_data->rec_data;
+	gnnc_device_v_info[temp_data->channnel].current_value_L = (temp_data->rec_data&0xFFFF);
 	printf("录入数据:%d--%d\n",gnnc_device_v_info[temp_data->channnel].current_value_H,gnnc_device_v_info[temp_data->channnel].current_value_L);
 	if(temp_data->cmd == 0x03)
 	{
 		//记录数据
-		if(device_record_count[temp_data->channnel] > MAX_RECORD_MESSAGE_NUM)
+		if(device_record_count[temp_data->channnel] >= MAX_RECORD_MESSAGE_NUM)
 		{
 			//更新记录--更新数据
-			gnnc_device_v_info[temp_data->channnel].device_count_num = (gnnc_device_v_info[temp_data->channnel].device_count_num >= MAX_RECORD_MESSAGE_NUM)?0:gnnc_device_v_info[temp_data->channnel].device_count_num++;
+			gnnc_device_v_info[temp_data->channnel].device_count_num += (gnnc_device_v_info[temp_data->channnel].device_count_num >= MAX_RECORD_MESSAGE_NUM)?0:1;
+			update_table_data(device_tab_name_list[temp_data->channnel] ,timestamp ,temp_data->channnel ,&gnnc_device_v_info[temp_data->channnel]);
 		}
 		else
 		{
@@ -187,7 +205,7 @@ static uint16_t Cpu_Id_2_Get(void *data)
 	{
 		gnnc_device_v_info[temp_data->channnel].device_id_H <<= 16;
 		gnnc_device_v_info[temp_data->channnel].device_id_H |= (temp_data->rec_data&0xFFFF);
-		printf("获取通道：%d CPUID1-2：%0*lX\n",temp_data->channnel ,16,gnnc_device_v_info[temp_data->channnel].device_id_H);
+		printf("获取通道：%d CPUID1-2：%08X\n",temp_data->channnel ,gnnc_device_v_info[temp_data->channnel].device_id_H);
 		return (temp_data->rec_data&0xFFFF);
 	}
 	return 0;
@@ -242,6 +260,7 @@ static uint16_t Cpu_Id_6_Get(void *data)
 	return 0;
 }
 
+/*读取通道设备运行时间*/
 static uint16_t Running_Sec_H_Get(void *data)
 {
 	modbus_master_rec_t *temp_data = (modbus_master_rec_t *)data;
@@ -253,6 +272,7 @@ static uint16_t Running_Sec_H_Get(void *data)
 	return 0;
 }
 
+/*读取通道设备运行时间*/
 static uint16_t Running_Sec_L_Get(void *data)
 {
 	modbus_master_rec_t *temp_data = (modbus_master_rec_t *)data;
@@ -266,28 +286,69 @@ static uint16_t Running_Sec_L_Get(void *data)
 	return 0;
 }
 
+/*设置读取数据库数的时间起点*/
+static uint16_t Set_Read_Data_Time_H(void *data)
+{
+	modbus_master_rec_t *temp_data = (modbus_master_rec_t *)data;
+	if(temp_data->channnel > DEVICE_TAB_COUNT_NUM)
+	{
+		printf("参数越界！\n");
+		return 0;
+	}
+	if(temp_data->cmd == 0x03)
+	{
+		return ((gnnc_device_v_info[temp_data->channnel].read_data_time>>16)&0xFFFF);
+	}
+	if(temp_data->cmd == 0x10)
+	{
+		gnnc_device_v_info[temp_data->channnel].read_data_time = temp_data->rec_data&0xFFFF;
+		gnnc_device_v_info[temp_data->channnel].read_data_time <<= 16;
+	}
+	return 0;
+}
+
+/*设置读取数据库时间起点*/
+static uint16_t Set_Read_Data_Time_L(void *data)
+{
+	modbus_master_rec_t *temp_data = (modbus_master_rec_t *)data;
+	if(temp_data->channnel > DEVICE_TAB_COUNT_NUM)
+	{
+		printf("参数越界！\n");
+		return 0;
+	}
+	if(temp_data->cmd == 0x03)
+	{
+		printf("获取通道%u 设定的查询起始时间%d\n",temp_data->channnel,gnnc_device_v_info[temp_data->channnel].read_data_time);
+		return (gnnc_device_v_info[temp_data->channnel].read_data_time&0xFFFF);
+	}
+	if(temp_data->cmd == 0x10)
+	{
+		gnnc_device_v_info[temp_data->channnel].read_data_time |= (temp_data->rec_data&0xFFFF);
+		printf("录入数据%08X\n",gnnc_device_v_info[temp_data->channnel].read_data_time);
+	}
+	return 0;
+}
+
+
 /*响应上位机查询需求*/
 static uint16_t Read_Data_From_Db_Get(void *data)
 {
 	modbus_master_rec_t *temp_data = (modbus_master_rec_t *)data;
 	if(temp_data->cmd == 0x03)
 	{
-		Ret_master_Read_Ack();
-	}
-	//上位机读取起始时间设置
-	if(temp_data->cmd == 0x10)
-	{
-//		temp_data->rec_data;
+		Ret_master_Read_Ack(temp_data->channnel);
 	}
 	return 0;
 }
 
+/*设置读写串口运行模式*/
 static uint16_t Set_Uart_Mode(void *data)
 {
 	modbus_master_rec_t *temp_data = (modbus_master_rec_t *)data;
 	//返回串口模式数据
 	if(temp_data->cmd == 0x03)
 	{
+		printf("读取控制UART模式数据:%u\n",uart_mode);
 		return uart_mode;
 	}
 	//上位机设置串口模式
@@ -298,15 +359,162 @@ static uint16_t Set_Uart_Mode(void *data)
 	}
 	return 0;
 }
-/* 返回数据库数据给上位机 */
-static int Ret_master_Read_Ack(void)
+
+static uint16_t Set_Report_Cycle(void *data)
 {
-	for(int i = 0; i < DEVICE_TAB_COUNT_NUM; i++)
+	modbus_master_rec_t *temp_data = (modbus_master_rec_t *)data;
+	//上位机读取本机上报周期
+	if(temp_data->cmd == 0x03)
+	{
+		printf("读取通道%u 上报周期%u\n",temp_data->channnel,gnnc_device_v_info[temp_data->channnel].report_period);
+		return gnnc_device_v_info[temp_data->channnel].report_period;
+	}
+	//上位机设置设备上报周期
+	if(temp_data->cmd == 0x10)
+	{
+		uint8_t channel = (temp_data->channnel&0xFF);
+		if(channel > 0x0B)
+		{
+			printf("参数错误\n");
+			return 0;
+		}
+		if(channel == 0x0B)
+		{
+			for(uint8_t i = 1; i < UART_NUM_MAX+1 ;i++)
+			{
+				//更新参数
+				par_set_mqtt_report_cycle(temp_data->rec_data&0xFF ,i);
+				printf("设置当前多通道:%u 设备周期:%d\n",i ,gnnc_device_v_info[i].report_period);
+			}
+		}
+		else
+		{
+			//更新单通道参数
+			par_set_mqtt_report_cycle(temp_data->rec_data&0xFF ,channel);
+			printf("设置当前单通道:%d 设备周期:%d\n",temp_data->channnel ,gnnc_device_v_info[temp_data->channnel].report_period);
+		}
+
+	}
+	return 0;
+}
+
+/* 返回数据库数据给上位机 */
+static int Ret_master_Read_Ack(uint16_t channel)
+{
+	//返回所有通道数据
+	if(channel == 0x0B)
+	{
+		for(int i = 1; i < DEVICE_TAB_COUNT_NUM+1; i++)
+		{
+			//查询符合时间范围内的数据
+			printf("查询通道%d  > %ds范围数据\n",i,gnnc_device_v_info[i].read_data_time);
+			record_query_up_time_region(device_tab_name_list[i],gnnc_device_v_info[i].read_data_time,i ,process_query_send);
+		}
+	}
+	//返回指定通道数据
+	if(channel != 0x0B && channel < DEVICE_TAB_COUNT_NUM+1)
 	{
 		//查询符合时间范围内的数据
-		record_query_up_time_region(device_tab_name_list[i],time((time_t *)NULL ),i ,process_query_send);
+		printf("查询通道%u  > %ds范围数据\n",channel,gnnc_device_v_info[channel].read_data_time);
+		record_query_up_time_region(device_tab_name_list[channel],gnnc_device_v_info[channel].read_data_time,channel ,process_query_send);
 	}
+	return 0;
+}
 
+/*设置mqtt服务器 配置192.168*/
+static uint16_t Set_Mqtt_Server_H(void *data)
+{
+	modbus_master_rec_t *temp_data = (modbus_master_rec_t *)data;
+	static uint16_t mqtt_serverip_H = 0xC0A8;
+	if(temp_data->cmd == 0x10)
+	{
+		mqtt_serverip_H = temp_data->rec_data&0xFFFF;
+		sprintf(mqtt_server,"%d.%d",(mqtt_serverip_H>>8)&0xFF,mqtt_serverip_H&0xFF);
+		printf("当前写入mqttip %s\n",mqtt_server);
+	}
+	if(temp_data->cmd == 0x03)
+	{
+		return mqtt_serverip_H;
+	}
+	return 0;
+}
+/*设置mqtt服务器 配置.1.37*/
+static uint16_t Set_Mqtt_Server_L(void *data)
+{
+	modbus_master_rec_t *temp_data = (modbus_master_rec_t *)data;
+	static uint16_t mqtt_serverip_L = 0x125;
+	char temp_ip[9];
+	if(temp_data->cmd == 0x10)
+	{
+		mqtt_serverip_L = temp_data->rec_data&0xFFFF;
+		sprintf(temp_ip,".%d.%d",(mqtt_serverip_L>>8)&0xFF,mqtt_serverip_L&0xFF);
+		strcat(mqtt_server,temp_ip);
+		printf("当前写入mqttip %s\n",mqtt_server);
+		par_set_mqtt_server(mqtt_server);
+	}
+	if(temp_data->cmd == 0x03)
+	{
+		return mqtt_serverip_L;
+	}
+	return 0;
+}
+
+/*设置TCP 服务器*/
+static uint16_t Set_Tcp_Server_H(void *data)
+{
+	modbus_master_rec_t *temp_data = (modbus_master_rec_t *)data;
+	static uint16_t tcp_serverip_H = 0xC0A8;
+	if(temp_data->cmd == 0x10)
+	{
+		tcp_serverip_H = temp_data->rec_data&0xFFFF;
+		sprintf(server_ip,"%d.%d",(tcp_serverip_H>>8)&0xFF,tcp_serverip_H&0xFF);
+		printf("当前写入mqttip %s\n",server_ip);
+	}
+	if(temp_data->cmd == 0x03)
+	{
+		return tcp_serverip_H;
+	}
+	return 0;
+}
+
+static uint16_t Set_Tcp_Server_L(void *data)
+{
+	modbus_master_rec_t *temp_data = (modbus_master_rec_t *)data;
+	static uint16_t tcp_serverip_L = 0x125;
+	char temp_ip[9];
+	if(temp_data->cmd == 0x10)
+	{
+		tcp_serverip_L = temp_data->rec_data&0xFFFF;
+		sprintf(temp_ip,".%d.%d",(tcp_serverip_L>>8)&0xFF,tcp_serverip_L&0xFF);
+		strcat(server_ip,temp_ip);
+		printf("当前写入tcpip %s\n",server_ip);
+		pat_set_tcp_server(server_ip);
+	}
+	if(temp_data->cmd == 0x03)
+	{
+		return tcp_serverip_L;
+	}
+	return 0;
+}
+
+/*设置tcp 端口号*/
+static uint16_t Set_Tcp_Port(void *data)
+{
+	modbus_master_rec_t *temp_data = (modbus_master_rec_t *)data;
+	if(temp_data->cmd == 0x10)
+	{
+		uint16_t temp_port = temp_data->rec_data&0xFFFF;
+		if(temp_port == 0)
+		{
+			return 0;
+		}
+		printf("当前写入tcp_port %u\n",temp_port);
+		pat_set_tcp_server_port(temp_port);
+	}
+	if(temp_data->cmd == 0x03)
+	{
+		return port_num;
+	}
 	return 0;
 }
 /* SIG_KILL 处理函数 */
@@ -314,6 +522,7 @@ static void decode_sig_hander(int signo)
 {
 	pthread_exit(0);
 }
+
 /* modbus解码的LOOP
  *
  * 接收slave包并解析【本机作为master】
@@ -439,7 +648,6 @@ void* modbus_master_decode_start(void* data) {
  * */
 static void return_rw_message(int fd,uint8_t *ptr,uint16_t msglen)
 {
-	uint8_t CRC_value_L,CRC_value_H;
 	uint16_t crc_ret = 0;
 	uint8_t Uart_Send_master_BUFF[UART_SEND_BUFF_MAX];
 
@@ -448,10 +656,8 @@ static void return_rw_message(int fd,uint8_t *ptr,uint16_t msglen)
 	//修改数据
 	Uart_Send_master_BUFF[0] = get_end_point(fd);//更换固定头部设备ID
 	crc_ret = CRC_Return(Uart_Send_master_BUFF,msglen);
-	CRC_value_L =(uint8_t)(crc_ret &0x00FF);//有无符号重要！
-	CRC_value_H = (uint8_t)((crc_ret>>8)&0x00FF);
-	Uart_Send_master_BUFF[msglen] = CRC_value_L;
-	Uart_Send_master_BUFF[msglen+1] = CRC_value_H;
+	Uart_Send_master_BUFF[msglen] =(uint8_t)(crc_ret &0x00FF);//有无符号重要！
+	Uart_Send_master_BUFF[msglen+1] = (uint8_t)((crc_ret>>8)&0x00FF);
 	//打印数据
 	debug_print((uint8_t*)ptr,msglen+2);
 	printf("master : 转换!\n");
@@ -482,8 +688,10 @@ void* modbus_slave_decode_start(void* data) {
 	modbus_master_rec_t rec_data_temp;
 	signal(SIGKILL, decode_sig_hander);
 	while (1) {
-		if (cb_bytes_can_read(cb) >= 7) //比较当前可读数据长度=当前写入长度-已读长度）大于7即可进入,符合modbus协议最小长度
+		//比较当前可读数据长度=当前写入长度-已读长度）大于7即可进入,符合modbus协议最小长度
+		if (cb_bytes_can_read(cb) >= 7)
 		{
+			printf("is running\n");
 			msg_device_addr = *(((uint8_t*)cb->ptr + (cb->read_offset%cb->count))); //第一个字节为设备地址
 			read_offset = ((cb->read_offset + 1)%cb->count);
 			msg_cmd = *(((uint8_t*)cb->ptr + read_offset)); //第二个字节为功能码
@@ -499,14 +707,36 @@ void* modbus_slave_decode_start(void* data) {
 				CRC_value_H = (uint8_t)((crc_ret>>8)&0x00FF);
 				if(CRC_value_L == CRC_value_L_temp && CRC_value_H == CRC_value_H_temp)
 				{
+					/*获取控制起始地址*/
+					reg_start_addr = tmp_buff[2];
+					reg_start_addr <<= 8;
+					reg_start_addr |= tmp_buff[3];
+					reg_len = tmp_buff[4];
+					reg_len <<= 8;
+					reg_len |= tmp_buff[5];
+					if(reg_start_addr >= SET_UART_MODE && (reg_start_addr+reg_len) < MODBUS_PROTOL)
+					{
+						goto _read_self_par;
+					}
 					if(uart_mode == REC_THROUGH_MODE)//透传模式－－CRC计算修改ID后发送给slave
 					{
 						broker_rw_message(msg_device_addr,tmp_buff,msg_len);
 					}
 					if(uart_mode == REC_NOT_THROUGH_MODE)//本机解析模式
 					{
+						_read_self_par:
+						reg_start_addr = tmp_buff[2];
+						reg_start_addr <<= 8;
+						reg_start_addr |= tmp_buff[3];
+						reg_len = tmp_buff[4];
+						reg_len <<= 8;
+						reg_len |= tmp_buff[5];
 						rec_data_temp.channnel = msg_device_addr;
 						rec_data_temp.cmd = msg_cmd;
+						printf("读取寄存器:%u-%u个\n",reg_start_addr,reg_len);
+						printf("接收读取命令:");
+						debug_print(tmp_buff,msg_len+2);
+						rec_master_data(&rec_data_temp ,reg_start_addr ,reg_len);
 					}
 					cb_read_offset_inc(cb, msg_len+2);//偏移一帧报文
 				}
@@ -540,9 +770,9 @@ void* modbus_slave_decode_start(void* data) {
 					reg_start_addr = tmp_buff[2];
 					reg_start_addr <<= 8;
 					reg_start_addr |= tmp_buff[3];
-					if(reg_start_addr == SET_UART_MODE)
+					if(reg_start_addr >= SET_UART_MODE && (reg_start_addr+data_len/2) < MODBUS_PROTOL)
 					{
-						goto _set_uart;
+						goto _set_self_par;
 					}
 					if(uart_mode == REC_THROUGH_MODE)//透传模式－－修改ID CRC计算后发送给master
 					{
@@ -550,7 +780,7 @@ void* modbus_slave_decode_start(void* data) {
 					}
 					if(uart_mode == REC_NOT_THROUGH_MODE)//本机解析模式
 					{
-						_set_uart:
+						_set_self_par:
 						reg_start_addr = tmp_buff[2];
 						reg_start_addr <<= 8;
 						reg_start_addr |= tmp_buff[3];
@@ -561,7 +791,7 @@ void* modbus_slave_decode_start(void* data) {
 						rec_data_temp.cmd = msg_cmd;
 						rec_data_temp.rec_data = 0;
 						rec_data_temp.data_addr = &tmp_buff[7];
-						printf("控制命令:0x%02X-0x%02X\n",tmp_buff[7],tmp_buff[8]);
+						printf("控制数据:0x%02X-0x%02X\n",tmp_buff[7],tmp_buff[8]);
 						printf("接收控制命令:");
 						debug_print(tmp_buff,msg_len+2);
 						rec_master_data(&rec_data_temp ,reg_start_addr ,reg_len);
@@ -590,8 +820,9 @@ void* modbus_slave_decode_start(void* data) {
 			}
 
 		}
-		usleep(100*1000);
+		usleep(200*1000);
 	}
+	printf("ERROR !!!\n");
 	return NULL;
 }
 
@@ -600,7 +831,6 @@ void* modbus_slave_decode_start(void* data) {
  * */
 static void broker_rw_message(int channel,uint8_t *ptr,uint16_t msglen)
 {
-	uint8_t CRC_value_L,CRC_value_H;
 	uint16_t crc_ret = 0;
 	uint8_t Uart_Send_slave_BUFF[UART_SEND_BUFF_MAX];
 	//复制数据
@@ -608,10 +838,8 @@ static void broker_rw_message(int channel,uint8_t *ptr,uint16_t msglen)
 	//修改数据
 	Uart_Send_slave_BUFF[0] = 0XFF;//更换固定头部设备ID
 	crc_ret = CRC_Return(Uart_Send_slave_BUFF,msglen);
-	CRC_value_L =(uint8_t)(crc_ret &0x00FF);//有无符号重要！
-	CRC_value_H = (uint8_t)((crc_ret>>8)&0x00FF);
-	Uart_Send_slave_BUFF[msglen] = CRC_value_L;
-	Uart_Send_slave_BUFF[msglen+1] = CRC_value_H;
+	Uart_Send_slave_BUFF[msglen] =(uint8_t)(crc_ret &0x00FF);//有无符号重要！
+	Uart_Send_slave_BUFF[msglen+1] = (uint8_t)((crc_ret>>8)&0x00FF);
 	//打印数据
 	debug_print((uint8_t*)ptr,msglen+2);
 	printf("slave : 转换!\n");
@@ -712,42 +940,83 @@ static void rec_slave_data(modbus_master_rec_t *rec_struct ,uint8_t len)
 
 /*
  * 本机作为slave独立解析主站数据包 --响应 控制和读取操作
- *
+ * 参数：rec_struct 需要将 写入数据的起始地址传入（当为写入命令） | 命令类型 | 通道号（当需要读取指定通道时）
  * 参数:reg_begin_addr 起始寄存器地址
  * 参数:len 寄存器数量长度
  * */
 static void rec_master_data(modbus_master_rec_t *rec_struct ,uint16_t reg_begin_addr ,uint16_t len)
 {
 	uint8_t ack_data_buff[128] = {0};
+	uint16_t crc_ret = 0;
 	uint16_t read_offset = 0;
 	uint16_t reg_addr = reg_begin_addr;
 	uint16_t reg_end = reg_addr+len;
-	printf("通道:%02X-命令:%02X-数据:%02X-数据:%02X\n",rec_struct->channnel,rec_struct->cmd,*rec_struct->data_addr,*(rec_struct->data_addr+1));
 	uint8_t *data_addr = rec_struct->data_addr;
 
-	for(;reg_addr < reg_end ;reg_addr++)
+	//准备通用头部应答消息
+	ack_data_buff[0] = rec_struct->channnel&0xFF;
+	ack_data_buff[1] = rec_struct->cmd;
+	//写入命令
+	if(ack_data_buff[1] == 0x10)
 	{
-		rec_struct->rec_data = (*data_addr+read_offset)&0xFF;
-		rec_struct->rec_data <<= 8;
-		rec_struct->rec_data |= (*(data_addr+read_offset+1))&0xFF;
-		reg_process_map[Check_Modbus_Addr(reg_addr)].func(rec_struct);
-		printf("处理寄存器值:%d,长度:%d\n",reg_addr,len);
-		read_offset += 2;
+		if(data_addr == NULL || len == 0)
+		{
+			return;
+		}
+		printf("通道:%02X-命令:%02X-数据:%02X-数据:%02X\n",rec_struct->channnel,rec_struct->cmd,*rec_struct->data_addr,*(rec_struct->data_addr+1));
+		printf("===处理寄存器值:%d,数量:%d===\n",reg_addr,len);
+		for(;reg_addr < reg_end ;reg_addr++)
+		{
+			rec_struct->rec_data = *(data_addr+read_offset)&0xFF;
+			rec_struct->rec_data <<= 8;
+			rec_struct->rec_data |= (*(data_addr+read_offset+1))&0xFF;
+			printf("==写入寄存器值:%04X,寄存器:%d==\n",rec_struct->rec_data,reg_addr);
+			reg_process_map[Check_Modbus_Addr(reg_addr)].func(rec_struct);
+			read_offset += 2;
+		}
+		//寄存器地址
+		ack_data_buff[2] = ((reg_begin_addr>>8)&0xFF);
+		ack_data_buff[3] = (reg_begin_addr&0xFF);
+		//寄存器数量
+		uint16_t reg_num = len;
+		ack_data_buff[4] = ((reg_num>>8)&0xFF);
+		ack_data_buff[5] = reg_num&0xFF;
+		//校验CRC
+		crc_ret = CRC_Return(ack_data_buff,6);
+		ack_data_buff[6] =(uint8_t)(crc_ret &0x00FF);//有无符号重要！
+		ack_data_buff[7] = (uint8_t)((crc_ret>>8)&0x00FF);
+		//ACK发送至上位机
+		tcp_client_tx(sockfd, ack_data_buff, 8);//发送至本机上级
+	}
+	//读取命令
+	if(ack_data_buff[1] == 0x03)
+	{
+		if(len == 0)
+		{
+			return;
+		}
+		uint16_t ret_data = 0;
+		//寄存器数据从第4个字节开始填充 索引为3
+		read_offset = 3;
+		//字节数
+		ack_data_buff[2] = len*2;
+		//读取寄存器数据 填充
+		for(;reg_addr < reg_end ;reg_addr++)
+		{
+			ret_data = reg_process_map[Check_Modbus_Addr(reg_addr)].func(rec_struct);
+			printf("读取寄存器值:%d,值:%d\n",reg_addr,ret_data);
+			ack_data_buff[read_offset++] = ((ret_data>>8)&0xFF);
+			ack_data_buff[read_offset++] = (ret_data&0xFF);
+		}
+		//校验CRC
+		crc_ret = CRC_Return(ack_data_buff,6);
+		ack_data_buff[read_offset++] =(uint8_t)(crc_ret &0x00FF);//有无符号重要！
+		ack_data_buff[read_offset++] = (uint8_t)((crc_ret>>8)&0x00FF);
+		//ACK发送至上位机
+		tcp_client_tx(sockfd, ack_data_buff ,read_offset);//发送至本机上级
 	}
 }
 
-/*
- * 本机作为slave接受主站控制，回复响应数据
- *
- * 参数 msg 回复消息地址
- *
- * len 消息数量
- * */
-static void rec_master_data_ack(uint8_t *msg ,uint16_t len)
-{
-
-
-}
 
 /*
  * modbus CRC校验
@@ -795,15 +1064,13 @@ void debug_print(uint8_t *msg,uint8_t msg_len)
  *
  * 缓冲区Uart_Send_master_BUFF
  * */
-int8_t modbus_master_decode_test(void* data) {
+int8_t modbus_master_decode_mannul(void* data) {
 	circular_buffer *cb = (circular_buffer *) (data);
 	uint8_t msg_device_addr,msg_cmd ,device_channel;
 	uint8_t CRC_value_L,CRC_value_H,CRC_value_L_temp,CRC_value_H_temp;
 	uint16_t crc_ret = 0,msg_len = 0;
 	uint16_t read_offset = 0;
 	uint8_t tmp_buff[128];
-	//透传模式下：缓冲区数据发送至下级slave
-	uint8_t Uart_Send_master_BUFF[UART_SEND_BUFF_MAX];
 	//独立运行模式：主动解析
 	modbus_master_rec_t rec_data_temp;
 	uint16_t time_delay = 0;
@@ -835,20 +1102,6 @@ int8_t modbus_master_decode_test(void* data) {
 				if(CRC_value_L == CRC_value_L_temp && CRC_value_H == CRC_value_H_temp)
 				{
 					device_channel = get_end_point(cb->fd);//更换固定头部设备ID
-					if(uart_mode == REC_THROUGH_MODE)//透传模式－－CRC计算修改ID后发送给master
-					{
-						memcpy(Uart_Send_master_BUFF,(uint8_t*) ((uint8_t*)cb->ptr + cb->read_offset+1),msg_len);
-						Uart_Send_master_BUFF[0] = device_channel;//添加通道号作为ID
-						crc_ret = CRC_Return(Uart_Send_master_BUFF,msg_len);
-						CRC_value_L =(uint8_t)(crc_ret &0x00FF);//有无符号重要！
-						CRC_value_H = (uint8_t)((crc_ret>>8)&0x00FF);
-						Uart_Send_master_BUFF[msg_len] = CRC_value_L;
-						Uart_Send_master_BUFF[msg_len+1] = CRC_value_H;
-						debug_print((uint8_t*)((uint8_t*)cb->ptr + cb->read_offset),msg_len+2);
-						printf("master : 转换!\n");
-						debug_print((uint8_t*)Uart_Send_master_BUFF,msg_len+2);
-						tcp_client_tx(sockfd, Uart_Send_master_BUFF, msg_len+2);//发送至本机上级
-					}
 					if(uart_mode == REC_NOT_THROUGH_MODE)//本机解析模式
 					{
 						printf("进入!\n");
@@ -878,33 +1131,20 @@ int8_t modbus_master_decode_test(void* data) {
 			else if(msg_cmd == 0x10)//slave从机返回控制寄存器地址及数量
 			{
 				msg_len = 6;//不含CRC字节数
-				crc_ret = CRC_Return((uint8_t*) ((uint8_t*)cb->ptr + cb->read_offset),msg_len);
+				CQ_get_buff_Data(cb, (uint8_t *)tmp_buff, msg_len+2);
+				crc_ret = CRC_Return(tmp_buff,msg_len);
 				CRC_value_L =(uint8_t)(crc_ret &0x00FF);//有无符号重要！
 				CRC_value_H = (uint8_t)((crc_ret>>8)&0x00FF);
-				CRC_value_L_temp = *((uint8_t*) ((uint8_t*)cb->ptr + cb->read_offset + msg_len));
-				CRC_value_H_temp = *((uint8_t*) ((uint8_t*)cb->ptr + cb->read_offset + msg_len+1));
+				CRC_value_L_temp = tmp_buff[msg_len];
+				CRC_value_H_temp = tmp_buff[msg_len+1];
 				if(CRC_value_L == CRC_value_L_temp && CRC_value_H == CRC_value_H_temp)//校验正确
 				{
 					device_channel = get_end_point(cb->fd);//更换固定头部设备ID
-					if(uart_mode == REC_THROUGH_MODE)//透传模式－－CRC计算修改ID后发送给master
-					{
-						memcpy(Uart_Send_master_BUFF,(uint8_t*) ((uint8_t*)cb->ptr + cb->read_offset+1),msg_len);
-						Uart_Send_master_BUFF[0] = device_channel;//添加通道号作为ID
-						crc_ret = CRC_Return(Uart_Send_master_BUFF,msg_len);
-						CRC_value_L =(uint8_t)(crc_ret &0x00FF);//有无符号重要！
-						CRC_value_H = (uint8_t)((crc_ret>>8)&0x00FF);
-						Uart_Send_master_BUFF[msg_len] = CRC_value_L;
-						Uart_Send_master_BUFF[msg_len+1] = CRC_value_H;
-						debug_print((uint8_t*)((uint8_t*)cb->ptr + cb->read_offset),msg_len+2);
-						printf("master : 转换!\n");
-						debug_print((uint8_t*)Uart_Send_master_BUFF,msg_len+2);
-						tcp_client_tx(sockfd, Uart_Send_master_BUFF, msg_len+2);//发送至本机上级
-					}
 					if(uart_mode == REC_NOT_THROUGH_MODE)//本机解析模式
 					{
 
 					}
-//					cb_read_offset_inc(cb, msg_len+2);//偏移一帧报文
+					cb_read_offset_inc(cb, msg_len+2);//偏移一帧报文
 					return 0;
 				}
 				else

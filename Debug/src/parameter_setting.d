@@ -6,7 +6,8 @@ src/parameter_setting.o: ../src/parameter_setting.cpp \
  /home/aron566/eclipse-workspace/GNNC_SCREEN/include/serial_opt.h \
  /home/aron566/eclipse-workspace/GNNC_SCREEN/include/CircularQueue.h \
  /home/aron566/eclipse-workspace/GNNC_SCREEN/include/mqtt_opt.h \
- /home/aron566/eclipse-workspace/GNNC_SCREEN/include/serial_opt.h
+ /home/aron566/eclipse-workspace/GNNC_SCREEN/include/serial_opt.h \
+ /home/aron566/eclipse-workspace/GNNC_SCREEN/include/db_opt.h
 
 /home/aron566/eclipse-workspace/GNNC_SCREEN/include/parameter_setting.h:
 
@@ -23,3 +24,5 @@ src/parameter_setting.o: ../src/parameter_setting.cpp \
 /home/aron566/eclipse-workspace/GNNC_SCREEN/include/mqtt_opt.h:
 
 /home/aron566/eclipse-workspace/GNNC_SCREEN/include/serial_opt.h:
+
+/home/aron566/eclipse-workspace/GNNC_SCREEN/include/db_opt.h:

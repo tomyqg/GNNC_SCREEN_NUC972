@@ -36,9 +36,8 @@ static void usart10_init(void);
 /*初始化uart运行模式*/
 static void uart_running_mode_init(void);
 /*本机运行在主动查询模式--独立工作*/
-static void call_c_timer_task_opt_func(c_timer_task_opt *timer ,c_timer_manager_t *task ,bool on_off);
 static void *uart_send_data_loop(void* ptmr);
-
+static void call_c_timer_task_opt_func(c_timer_task_opt *timer ,c_timer_manager_t *task ,bool on_off);
 //int file_id_1 = -1;//串口ttyS6
 //int file_id_2 = -1;//串口ttyS7
 
@@ -57,8 +56,18 @@ c_timer_manager_t modbus_read_data_poll =
 	.data = NULL
 };
 
+c_timer_manager_t modbus_default_read_data_1_poll =
+{
+	.interval_seconds = 1,
+	.timer_on_off = true,
+	.run_state = false,
+	.p_task = modbus_master_decode_start,//建立任务
+	.pid = 0,
+	.offset = 0,
+	.data = NULL
+};
 
-c_timer_manager_t modbus_default_read_data_poll =
+c_timer_manager_t modbus_default_read_data_2_poll =
 {
 	.interval_seconds = 1,
 	.timer_on_off = true,
@@ -370,7 +379,7 @@ static void *uart_send_data_loop(void* ptmr)
 				printf("当前需读取到%d字节，通道：%d，reg：%d\n",polling_msg[fd_count].read_count,polling_msg[fd_count].read_channel,polling_msg[fd_count].read_reg);
 				printf("->->->->发送一包至通道%d 挂起发送,等接收完成.......！\n",fd_count);
 				//解析
-				int8_t ret = modbus_master_decode_test(polling_msg[fd_count].cb);
+				int8_t ret = modbus_master_decode_mannul(polling_msg[fd_count].cb);
 				switch(ret)
 				{
 					case 0:
@@ -404,9 +413,9 @@ static void *uart_send_data_loop(void* ptmr)
 	}
 	sleep(1);
 	printf("is alived !\n");
-}
-printf("跳出！\n");
-return NULL;
+  }
+  printf("跳出！\n");
+  return NULL;
 }
 static void call_c_timer_task_opt_func(c_timer_task_opt *timer ,c_timer_manager_t *task ,bool on_off)
 {
@@ -434,15 +443,22 @@ uint8_t switch_running_mode(uint8_t mode)
 	if(mode == REC_NOT_THROUGH_MODE) //运行在独立模式 --开启任务
 	{
 		printf("独立模式运行中,轮寻从机数据. . .\n");
-		call_c_timer_task_opt_func(&main_timer_task ,&modbus_default_read_data_poll ,false);
+		call_c_timer_task_opt_func(&main_timer_task ,&modbus_default_read_data_1_poll ,false);
+		call_c_timer_task_opt_func(&main_timer_task ,&modbus_default_read_data_2_poll ,false);
+
 		call_c_timer_task_opt_func(&main_timer_task ,&modbus_read_data_poll ,true);
 	}
 	else if(mode == REC_THROUGH_MODE) //运行在透传模式 --关闭任务
 	{
 		printf("透传模式运行中,等待主机数据. . .\n");
+		//关闭独立工作
 		call_c_timer_task_opt_func(&main_timer_task ,&modbus_read_data_poll ,false);
-		modbus_default_read_data_poll.data = polling_msg[2].cb;
-		call_c_timer_task_opt_func(&main_timer_task ,&modbus_default_read_data_poll ,true);
+		//启动端口1
+		modbus_default_read_data_1_poll.data = polling_msg[1].cb;
+		call_c_timer_task_opt_func(&main_timer_task ,&modbus_default_read_data_1_poll ,true);
+		//启动端口2
+		modbus_default_read_data_2_poll.data = polling_msg[2].cb;
+		call_c_timer_task_opt_func(&main_timer_task ,&modbus_default_read_data_2_poll ,true);
 	}
 	return 0;
 }
@@ -542,7 +558,7 @@ void* usart1_rx_start(void* data)
 		fs_sel = select(file_id[1]+1,&fs_read,NULL,NULL,NULL);//返回准备好的文件描述符的数目　０超时　－１出错
 		if(fs_sel)
 		{
-			if(cb->write_offset > 512 && cb->read_offset < 512)//
+			if(cb->write_offset > 1024 && cb->read_offset < 512)//
 			{
 				printf("Buffer will overflow , discard!\n");//数据溢出
 				usart_discard(cb);
@@ -671,7 +687,7 @@ void* usart5_rx_start(void* data)
 //		fs_sel = select(file_id_5+1,&fs_read,NULL,NULL,NULL);//返回准备好的文件描述符的数目　０超时　－１出错
 //		if(fs_sel)
 //		{
-//			if(cb->write_offset > 512 && cb->read_offset < 512)//写入大于3K并且,读取小于2K则属于溢出
+//			if(cb->write_offset > 1024 && cb->read_offset < 512)//写入大于3K并且,读取小于2K则属于溢出
 //			{
 //				printf("Buffer will overflow , discard!\n");//数据溢出
 //				usart_discard(cb);
@@ -702,7 +718,7 @@ void* usart6_rx_start(void* data)
 //		fs_sel = select(file_id_6+1,&fs_read,NULL,NULL,NULL);//返回准备好的文件描述符的数目　０超时　－１出错
 //		if(fs_sel)
 //		{
-//			if(cb->write_offset > 512 && cb->read_offset < 512)//写入大于3K并且,读取小于2K则属于溢出
+//			if(cb->write_offset > 1024 && cb->read_offset < 512)//写入大于3K并且,读取小于2K则属于溢出
 //			{
 //				printf("Buffer will overflow , discard!\n");//数据溢出
 //				usart_discard(cb);

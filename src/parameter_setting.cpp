@@ -5,8 +5,6 @@
  *      Author: aron566
  */
 
-//日志文件生成及参数设置入口
-
 #ifdef __cplusplus //使用ｃ编译
 extern "C" {
 #endif
@@ -26,6 +24,7 @@ extern "C" {
 #include "tcp_client.h"//用于设置tcp连接信息
 #include "mqtt_opt.h"//用于设置mqtt连接信息
 #include "serial_opt.h"
+#include "db_opt.h"
 
 #define GS_ERROR_INVAILD_PARAM -1
 #define GS_SUCCESS 				0
@@ -65,6 +64,8 @@ char mqtt_key[64] = "mqtt_user1";
 char mqtt_server[32] = "192.168.1.62";
 char mqtt_sub_topic[32] = "RCV";
 char mqtt_pub_topic[32] = "SEND";
+
+
 /**
 * 去掉字符串内所有空白
 * 且忽略注释部分
@@ -121,6 +122,16 @@ void GNNC_init_config(void)
 		cJSON_AddStringToObject(root,"mqtt_server",mqtt_server);
 		cJSON_AddStringToObject(root,"mqtt_sub_topic",mqtt_sub_topic);
 		cJSON_AddStringToObject(root,"mqtt_pub_topic",mqtt_pub_topic);
+		cJSON_AddNumberToObject(root,"mqtt_report_cycle_channel1",5);
+		cJSON_AddNumberToObject(root,"mqtt_report_cycle_channel2",5);
+		cJSON_AddNumberToObject(root,"mqtt_report_cycle_channel3",5);
+		cJSON_AddNumberToObject(root,"mqtt_report_cycle_channel4",5);
+		cJSON_AddNumberToObject(root,"mqtt_report_cycle_channel5",5);
+		cJSON_AddNumberToObject(root,"mqtt_report_cycle_channel6",5);
+		cJSON_AddNumberToObject(root,"mqtt_report_cycle_channel7",5);
+		cJSON_AddNumberToObject(root,"mqtt_report_cycle_channel8",5);
+		cJSON_AddNumberToObject(root,"mqtt_report_cycle_channel9",5);
+		cJSON_AddNumberToObject(root,"mqtt_report_cycle_channel10",5);
 		char *out = cJSON_Print(root);
 		GNNC_DEBUG_INFO("首次获取配置文件：%s",out);
 		fprintf(fp,"%s",out);
@@ -138,6 +149,7 @@ static void starup_read_config(void)
 {
 	char parameter_cmd[32];
 	int uart_mode_temp = 0;
+	int report_cycle_temp = 0;
     sprintf(parameter_cmd,"%s","serverip");
     GNNC_read_config(parameter_cmd,server_ip,para_string);//读取配置服务器ip配置
 
@@ -169,6 +181,45 @@ static void starup_read_config(void)
     sprintf(parameter_cmd,"%s","mqtt_pub_topic");
     GNNC_read_config(parameter_cmd,mqtt_pub_topic,para_string);//读取配置mqtt_pub_topic
 
+    sprintf(parameter_cmd,"%s","mqtt_report_cycle_channel1");
+    GNNC_read_config(parameter_cmd,&report_cycle_temp,para_int);//读取配置mqtt上报周期
+    gnnc_device_v_info[1].report_period = report_cycle_temp;
+
+    sprintf(parameter_cmd,"%s","mqtt_report_cycle_channel2");
+    GNNC_read_config(parameter_cmd,&report_cycle_temp,para_int);//读取配置mqtt上报周期
+    gnnc_device_v_info[2].report_period = report_cycle_temp;
+
+    sprintf(parameter_cmd,"%s","mqtt_report_cycle_channel3");
+    GNNC_read_config(parameter_cmd,&report_cycle_temp,para_int);//读取配置mqtt上报周期
+    gnnc_device_v_info[3].report_period = report_cycle_temp;
+
+    sprintf(parameter_cmd,"%s","mqtt_report_cycle_channel4");
+    GNNC_read_config(parameter_cmd,&report_cycle_temp,para_int);//读取配置mqtt上报周期
+    gnnc_device_v_info[4].report_period = report_cycle_temp;
+
+    sprintf(parameter_cmd,"%s","mqtt_report_cycle_channel5");
+    GNNC_read_config(parameter_cmd,&report_cycle_temp,para_int);//读取配置mqtt上报周期
+    gnnc_device_v_info[5].report_period = report_cycle_temp;
+
+    sprintf(parameter_cmd,"%s","mqtt_report_cycle_channel6");
+    GNNC_read_config(parameter_cmd,&report_cycle_temp,para_int);//读取配置mqtt上报周期
+    gnnc_device_v_info[6].report_period = report_cycle_temp;
+
+    sprintf(parameter_cmd,"%s","mqtt_report_cycle_channel7");
+    GNNC_read_config(parameter_cmd,&report_cycle_temp,para_int);//读取配置mqtt上报周期
+    gnnc_device_v_info[7].report_period = report_cycle_temp;
+
+    sprintf(parameter_cmd,"%s","mqtt_report_cycle_channel8");
+    GNNC_read_config(parameter_cmd,&report_cycle_temp,para_int);//读取配置mqtt上报周期
+    gnnc_device_v_info[8].report_period = report_cycle_temp;
+
+    sprintf(parameter_cmd,"%s","mqtt_report_cycle_channel9");
+    GNNC_read_config(parameter_cmd,&report_cycle_temp,para_int);//读取配置mqtt上报周期
+    gnnc_device_v_info[9].report_period = report_cycle_temp;
+
+    sprintf(parameter_cmd,"%s","mqtt_report_cycle_channel10");
+    GNNC_read_config(parameter_cmd,&report_cycle_temp,para_int);//读取配置mqtt上报周期
+    gnnc_device_v_info[10].report_period = report_cycle_temp;
 }
 
 /*启动参数配置*/
@@ -195,12 +246,18 @@ void startup_config(int argc ,char *argv[])
 int pat_set_board_name(char *name)
 {
 	char parameter_cmd[32];
-	if(name != NULL)
+	char temp_board[32];
+	sprintf(parameter_cmd,"board_name");
+	GNNC_read_config(parameter_cmd,temp_board,para_string);//读取配置
+	if(strcmp(board_name,temp_board))
 	{
-		sprintf(parameter_cmd,"board_name");
 		sprintf(board_name,"%s",name);
 		GNNC_midfield_config(parameter_cmd,board_name,para_string);
 		return 0;//刷新显示
+	}
+	else
+	{
+		printf("Warning 参数相同\n");
 	}
 	return -1;
 }
@@ -245,11 +302,12 @@ int pat_set_tcp_server(char *ip_addr)
 int pat_set_tcp_server_port(uint16_t port)
 {
 	char parameter_cmd[32];
-	if(port != 0)
+	if(port != 0 && port != port_num)
 	{
 		sprintf(parameter_cmd,"port_num");
 		port_num = port;
 		GNNC_midfield_config(parameter_cmd,&port_num,para_int);
+		printf("port_num = %u\n",port_num);
 		return socket_force_reconnect();
 	}
 	return -1;
@@ -258,18 +316,28 @@ int pat_set_tcp_server_port(uint16_t port)
 int par_set_mqtt_server(char *ip_addr)
 {
 	char parameter_cmd[32];
+	char temp_server[32];
+
 	if(ip_addr != NULL)
 	{
 		sprintf(parameter_cmd,"mqtt_server");
-		sprintf(mqtt_server,"%s",ip_addr);
-		GNNC_midfield_config(parameter_cmd,mqtt_server,para_string);
-		return switch_mqtt_server();
+		GNNC_read_config(parameter_cmd,temp_server,para_string);//读取配置mqtt server ip
+		if(strcmp(ip_addr,temp_server))
+		{
+			sprintf(mqtt_server,"%s",ip_addr);
+			GNNC_midfield_config(parameter_cmd,mqtt_server,para_string);
+			return switch_mqtt_server();
+		}
+		else
+		{
+			printf("Warning 参数相同\n");
+		}
 	}
 	return -1;
 }
 
 /*设置MQTT client id*/
-int par_set_mqtt_clent_id(char *id)
+int par_set_mqtt_client_id(char *id)
 {
 	char parameter_cmd[32];
 	if(id != NULL)
@@ -283,7 +351,7 @@ int par_set_mqtt_clent_id(char *id)
 }
 
 /*设置MQTT user*/
-int par_set_mqtt_clent_user(char *user)
+int par_set_mqtt_client_user(char *user)
 {
 	char parameter_cmd[32];
 	if(user != NULL)
@@ -297,7 +365,7 @@ int par_set_mqtt_clent_user(char *user)
 }
 
 /*设置MQTT user key*/
-int par_set_mqtt_clent_key(char *key)
+int par_set_mqtt_client_key(char *key)
 {
 	char parameter_cmd[32];
 	if(key != NULL)
@@ -311,7 +379,7 @@ int par_set_mqtt_clent_key(char *key)
 }
 
 /*设置MQTT user subtopic*/
-int par_set_mqtt_clent_sub(char *subtopic)
+int par_set_mqtt_client_sub(char *subtopic)
 {
 	char parameter_cmd[32];
 	if(subtopic != NULL)
@@ -325,7 +393,7 @@ int par_set_mqtt_clent_sub(char *subtopic)
 }
 
 /*设置MQTT user pubtopic*/
-int par_set_mqtt_clent_pub(char *pubtopic)
+int par_set_mqtt_client_pub(char *pubtopic)
 {
 	char parameter_cmd[32];
 	if(pubtopic != NULL)
@@ -336,6 +404,28 @@ int par_set_mqtt_clent_pub(char *pubtopic)
 		return switch_mqtt_server();
 	}
 	return -1;
+}
+
+/*设置mqtt上报周期*/
+int par_set_mqtt_report_cycle(uint16_t cycle ,uint8_t channel_num)
+{
+	char parameter_cmd[32];
+	int interval = cycle;
+	if(channel_num > UART_NUM_MAX)
+	{
+		printf("无效参数\n");
+		return -1;
+	}
+	if(gnnc_device_v_info[channel_num].report_period != cycle)
+	{
+		sprintf(parameter_cmd,"mqtt_report_cycle_channel%u",channel_num);
+		GNNC_midfield_config(parameter_cmd,&interval,para_int);
+		gnnc_device_v_info[channel_num].report_period = (interval&0xFFFF);
+		printf("改通道%u周期-当前周期：%d\n",channel_num ,gnnc_device_v_info[channel_num].report_period);
+		return 0;
+	}
+	printf("未修改通道%u周期-当前周期：%d\n",channel_num ,gnnc_device_v_info[channel_num].report_period);
+	return 0;
 }
 /*
  * 读取配置文件中指定键值对
@@ -352,7 +442,7 @@ int GNNC_read_config(char *identifier,void *value,para_data_type_t data_type)
 {
 	FILE  *fp 	= 	NULL;
 	cJSON *root = 	NULL;
-	char str[512] = {0};
+	char str[1024] = {0};
 	char txt[64] = {0};
 	fp = fopen(config_file_path, "r");
 	if(NULL == fp) {
@@ -360,7 +450,7 @@ int GNNC_read_config(char *identifier,void *value,para_data_type_t data_type)
 		exit(errno); /* 读文件错误直接按照错误码退出 */
 	}
 
-	GNNC_DEBUG_INFO("/root/GNNC_cnf.ini 读取配置文件中...");//调试用
+//	GNNC_DEBUG_INFO("/root/GNNC_cnf.ini 读取配置文件中...");//调试用
 	while((fgets(txt,64,fp))!=NULL)//循环读取64字节,如果没有数据则退出循环
 	{ /* 去掉字符串所有空白,注释也忽略 */
 		if (GNNC_strip_comments(txt, ' '))
@@ -368,6 +458,7 @@ int GNNC_read_config(char *identifier,void *value,para_data_type_t data_type)
 			strcat(str,txt);//拼接字符串
 		} /* end SNAI_strip_comments */
 	}
+//	printf("配置文件大小:\%dByte\n",strlen(str));
 	root = cJSON_Parse(str);
 	cJSON *item = cJSON_GetObjectItem(root,identifier);
 	switch(data_type)
@@ -407,12 +498,10 @@ int GNNC_read_config(char *identifier,void *value,para_data_type_t data_type)
 		break;
 	}
 	fclose(fp);//关闭才保存
-//	printf("关闭文件！\n");
 	if (NULL != root)
 	{
 		cJSON_Delete(root);
 	}
-//	printf("释放！\n");
 	return 0;
 }
 /*
@@ -428,7 +517,7 @@ int GNNC_midfield_config(char *identifier,void *value,para_data_type_t data_type
 {
 	FILE  *fp 	= 	NULL;
 	cJSON *root = 	NULL;
-	char str[512] = {0};
+	char str[1024] = {0};
 	char txt[64] = {0};
 	int int_value;
 	double float_value;

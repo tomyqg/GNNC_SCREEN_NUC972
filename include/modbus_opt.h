@@ -114,7 +114,10 @@ extern "C" {
 #define SET_TCP_SERVER_H				49003U//16进制显示:高字节区域:192 168
 #define SET_TCP_SERVER_L				49004U//16进制显示:低字节区域: 1   37
 #define SET_TCP_PORT					49005U//TCP端口号
-#define READ_DATA_FROM_DB				49006U//上位机读取数据库数据
+#define SET_READ_DATA_TIME_H			49006U//上位机设置读取数据库数据时间起点
+#define SET_READ_DATA_TIME_L			49007U//上位机设置读取数据库数据时间起点
+#define READ_DATA_FROM_DB				49008U//上位机读取数据库数据
+#define SET_REPORT_CYCLE				49009U//上位机设置本机数据上报周期MQTT 依据通道设置 发送至通道11则所有通道设定
 
 //终端参数 ---寄存器列表---
 #define MODBUS_PROTOL 					50000U//modbus协议 回复0230
@@ -181,8 +184,8 @@ typedef struct modbus_master_rec_
 {
 	int rec_data;//实时数据
 	uint8_t *data_addr;//数据指针-处理多个寄存器使用
-	unsigned short channnel;//数据来自通道
-	unsigned char cmd;//modbus命令
+	uint16_t channnel;//数据来自通道
+	uint8_t cmd;//modbus命令
 }modbus_master_rec_t;
 
 
@@ -204,6 +207,8 @@ void* modbus_master_decode_start(void* data);
 /*本机作为从机解码*/
 void* modbus_slave_decode_start(void* data);
 
+/*独立运行模式*/
+int8_t modbus_master_decode_mannul(void* data);
 
 typedef struct
 {
@@ -222,7 +227,8 @@ unsigned short CRC_Return(unsigned char *Crc_Buf, unsigned short Crc_Len);
 /*调试打印*/
 void debug_print(uint8_t *msg,uint8_t msg_len);
 
-int8_t modbus_master_decode_test(void* data);
+
+
 /*线程锁+信号量*/
 extern pthread_mutex_t GNNC_Decode_mutex_lock;
 extern pthread_cond_t GNNC_Decode_cond;

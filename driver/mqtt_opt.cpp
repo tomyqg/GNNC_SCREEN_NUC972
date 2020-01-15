@@ -4,14 +4,12 @@
  *  Created on: Jan 4, 2020
  *      Author: aron566
  */
-
+#include "timer_manager.h"//定时器管理
 #ifdef __cplusplus //使用ｃ编译
 extern "C" {
 #endif
 
-/*
- * 订阅功能
- * */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -21,6 +19,7 @@ extern "C" {
 #include "mosquitto.h"
 #include "mqtt_opt.h"
 #include "parameter_setting.h"
+
 //#define HOST "localhost"
 
 #define PORT  1883
@@ -28,13 +27,26 @@ extern "C" {
 #define MSG_MAX_SIZE  512
 
 
-
+static void *mqtt_reconnect_poll_loop(void* ptmr);
+static void call_c_timer_task(c_timer_task_opt *timer ,c_timer_manager_t *task ,bool on_off);
 int demo_publisher(void);
 int demo_subscribe(void);
 
 
 bool session = true;
 struct mosquitto *mosq = NULL;
+
+c_timer_manager_t mqtt_reconnect_poll =
+{
+	.interval_seconds = 1,
+	.timer_on_off = true,
+	.run_state = false,
+	.p_task = mqtt_reconnect_poll_loop,//建立任务
+	.pid = 0,
+	.offset = 0,
+	.data = NULL
+};
+
 /* SIGKILL信号处理 */
 void mqtt_sig_hander(int signo)
 {
@@ -49,8 +61,6 @@ void *start_mqtt(void *data)
 	signal(SIGKILL,mqtt_sig_hander);
 	demo_subscribe();
 	//demo_publisher();
-	//设置用户名密码
-//	int mosquitto_username_pw_set(struct mosquitto *mosq, const char *username, const char *password);
 	return NULL;
 }
 
@@ -180,8 +190,7 @@ int demo_publisher()
     return 0;
 }
 
-/*切换MQtt服务器IP*/
-int switch_mqtt_server(void)
+static void *mqtt_reconnect_poll_loop(void* ptmr)
 {
 	mosquitto_username_pw_set(mosq, mqtt_user, mqtt_key);
     while(1)
@@ -195,13 +204,40 @@ int switch_mqtt_server(void)
         }
         else
         {
-        	return 0;
+        	printf("MQTT is Connected !\n");
+        	return NULL;
         }
     }
-	return -1;
 }
 
+/*切换MQtt服务器IP*/
+int switch_mqtt_server(void)
+{
+	if(mqtt_reconnect_poll.p_task != 0)
+	{
+		call_c_timer_task(&main_timer_task ,&mqtt_reconnect_poll ,false);
+		call_c_timer_task(&main_timer_task ,&mqtt_reconnect_poll ,true);
+	}
+	else
+	{
+		call_c_timer_task(&main_timer_task ,&mqtt_reconnect_poll ,true);
+	}
+	return 0;
+}
 
+static void call_c_timer_task(c_timer_task_opt *timer ,c_timer_manager_t *task ,bool on_off)
+{
+	if(on_off)
+	{
+		timer->add_timer_task(*task);
+		timer->set_timer_onff(*task,on_off);
+	}
+	else
+	{
+		printf("删除前PID：%ld\n",task->pid);
+		timer->remove_timer(*task);
+	}
+}
 #ifdef __cplusplus //使用ｃ编译
 }
 #endif

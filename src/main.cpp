@@ -101,7 +101,7 @@ int main(int argc, char *argv[])
     circular_buffer* cb_usart8_rx = cb_create(path_8,9);
     circular_buffer* cb_usart9_rx = cb_create(path_9,9);
     circular_buffer* cb_usart10_rx = cb_create(path_10,9);
-    polling_msg[0].cb = NULL;
+    polling_msg[0].cb = cb_tcpip_rx;
     polling_msg[1].cb = cb_usart1_rx;
     polling_msg[2].cb = cb_usart2_rx;
     polling_msg[3].cb = cb_usart3_rx;
@@ -125,7 +125,7 @@ int main(int argc, char *argv[])
 		{usart8_rx_start,  cb_usart8_rx},
 		{usart9_rx_start,  cb_usart9_rx},
 		{usart10_rx_start, cb_usart10_rx},
-		{tcp_clent_start,  cb_tcpip_rx},
+//		{tcp_clent_start,  cb_tcpip_rx},
 //		{modbus_master_decode_start, cb_usart1_rx},
 //		{modbus_master_decode_start, cb_usart2_rx},
 		{modbus_slave_decode_start, cb_tcpip_rx},
@@ -150,6 +150,8 @@ int main(int argc, char *argv[])
 	startup_config(argc ,argv);
 	//初始化串口
 	usart_init();
+	//tcp初始化
+	tcp_connect_start_init();
 	/*启动线程*/
 	pthread_opt_seq_exec(pthread_user_seq);//启动线程
 	printf("clean up!\r\n");

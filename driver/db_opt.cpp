@@ -82,9 +82,9 @@ const char* sql_update_data_channel_field = "UPDATE MAIN.%s SET update_time = %l
 
 /*索引异常设备*/
 /*
- * 参数：表名，记录时间，上传周期，通道号
+ * 参数：表名，记录时间，上传周期，通道号 序号
  * */
-const char* sql_search_data = "SELECT * FROM MAIN.%s WHERE update_time <= %ld-(report_period*1) AND channel_num = %d;";
+const char* sql_search_data = "SELECT * FROM MAIN.%s WHERE update_time <= %ld-(report_period*3) AND channel_num = %d AND sequence_num = %d;";
 
 /*索引指定记录范围设备*/
 /*
@@ -319,7 +319,7 @@ static int record_query(const char *device_tab_name ,long int current_time ,int 
 
     if(db != NULL)
     {
-		snprintf(sqlcmd, sizeof(sqlcmd), sql_search_data,device_tab_name ,current_time ,channel);//update_time <= %d-(period*3)  这里%d为当前时间current_time，两个合在一起
+		snprintf(sqlcmd, sizeof(sqlcmd), sql_search_data,device_tab_name ,current_time ,channel ,gnnc_device_v_info[channel].device_count_num);//update_time <= %d-(period*3)  这里%d为当前时间current_time，两个合在一起
 #if ENABLE_DB_DEBUG
 	printf("%s\n",sqlcmd);
 #endif
@@ -463,6 +463,8 @@ static void process_query_math(char** pr, int row, int column)
 		temp_result[device_channel_num] = atoi(pr[j + 4]);
 		temp_result[device_channel_num] <<= 32;
 		temp_result[device_channel_num] |= (atoi(pr[j + 5])&&0xFFFFFFFF);//算出即时数据
+		//历史记录发送
+
 		//求平均值
 		channel_device_count[device_channel_num]++;
 		if(channel_device_count[device_channel_num] <= 1)
@@ -482,6 +484,11 @@ static void process_query_math(char** pr, int row, int column)
 
 }
 
+/*
+ * 发送查询结果给上位机、
+ *
+ * 参数：data 数据
+ * */
 
 //---------------------database_function_define_end-----------------------------
 
@@ -511,6 +518,7 @@ static void process_query_result(char** pr, int row, int column)
 			GNNC_DEBUG_INFO("Device【%d】The offline time:%02d:%02d:%02d\n\n",device_channel_num, p_tm->tm_hour,
 					p_tm->tm_min, p_tm->tm_sec);
 			gnnc_device_v_info[device_channel_num].device_state = 0;//离线
+			//设置此通道设备为离线状态
 			record_update_state(device_tab_name_list[device_channel_num] ,device_channel_num ,&gnnc_device_v_info[device_channel_num]);
 		}
 	}

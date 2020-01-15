@@ -12,10 +12,10 @@ extern "C" {
 #endif
 #include "serial_opt.h"
 
-void* tcp_clent_start(void* data);
+void tcp_connect_start_init(void);
 int tcp_client_tx(int fd,unsigned char* msg , int len);
 int socket_force_reconnect(void);
-extern int sockfd;
+extern volatile int sockfd;
 
 #ifdef __cplusplus //使用ｃ编译
 }
