@@ -20,6 +20,10 @@ extern volatile uint16_t uart_mode;
 
 /*启动参数配置*/
 void startup_config(int argc ,char *argv[]);
+
+/*设置软件版本*/
+extern char software_ver[];
+
 /*设置工装板名称*/
 extern char board_name[];
 

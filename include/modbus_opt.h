@@ -186,6 +186,8 @@ typedef struct modbus_master_rec_
 	uint8_t *data_addr;//数据指针-处理多个寄存器使用
 	uint16_t channnel;//数据来自通道
 	uint8_t cmd;//modbus命令
+	uint8_t *buff_addr;//配合0x13功能码
+	uint8_t channel_count;//配合0x13功能码
 }modbus_master_rec_t;
 
 
@@ -207,8 +209,10 @@ void* modbus_master_decode_start(void* data);
 /*本机作为从机解码*/
 void* modbus_slave_decode_start(void* data);
 
-/*独立运行模式*/
-int8_t modbus_master_decode_mannul(void* data);
+
+/*独立,透传合并处理*/
+void *modbus_polling_task_loop(void* ptmr);
+
 
 typedef struct
 {
@@ -217,10 +221,15 @@ typedef struct
 	volatile uint16_t read_channel;
 	circular_buffer *cb;
 }polling_msg_t;
+
 /*独立运行模式本机轮寻*/
 extern polling_msg_t polling_msg[];
 
+/*通讯序号*/
+extern volatile uint16_t msg_sequens_num;
 
+/*获得端口号索引*/
+uint8_t get_end_point(int fd);
 /*CRC16 校验*/
 unsigned short CRC_Return(unsigned char *Crc_Buf, unsigned short Crc_Len);
 
@@ -259,6 +268,7 @@ extern pthread_cond_t GNNC_REC_cond;
 //}
 //pthread_cond_wait(&GNNC_Decode_cond, &GNNC_Decode_mutex_lock);
 //pthread_mutex_unlock(&GNNC_REC_Data_mutex_lock);
+
 #ifdef __cplusplus //使用ｃ编译
 }
 #endif

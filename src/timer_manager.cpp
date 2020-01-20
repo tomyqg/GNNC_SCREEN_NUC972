@@ -11,6 +11,7 @@
 #include <iostream>
 #include <pthread.h>
 #include <signal.h>
+#include "run_log.h"
 //#include <algorithm>
 //定时任务初始化
 c_timer_manager_t c_timer_manager[] =
@@ -103,7 +104,6 @@ void c_timer_task_opt::set_timer_onff(c_timer_manager_t &timer_stuct,bool timer_
 	print_check_info(index);
 	if(timer_on_off)
 	{
-//		c_timer_manager_dynamic[index].data = timer_stuct.data;
 		timer_stuct.pid = realy_timer_start(true,index);
 	}
 	else
@@ -128,13 +128,13 @@ void c_timer_task_opt::set_offset(unsigned short offset,unsigned int index)
 }
 void c_timer_task_opt::add_timer_task(c_timer_manager_t &timer_stuct)
 {
-	std::cout << "添加前向量数目：";
+	std::cout << "===================================添加前向量数目：";
 	std::cout << c_timer_manager_dynamic.size();
-	std::cout << "\n延时时间:";
+	std::cout << "\n===================================延时时间:";
 	std::cout << c_timer_manager_dynamic.at(0).interval_seconds;
 	std::cout << "\n";
 	c_timer_manager_dynamic.insert(c_timer_manager_dynamic.begin(),timer_stuct);
-	std::cout << "添加后向量数目：";
+	std::cout << "===================================添加后向量数目：";
 	std::cout << c_timer_manager_dynamic.size();
 	std::cout << "\n";
 }
@@ -202,6 +202,8 @@ pthread_t c_timer_task_opt::realy_timer_start(bool timer_on_off,unsigned int ind
 			}
 			else
 			{
+				//处于分离状态--线程终止时底层资源立即被回收
+				pthread_detach(c_timer_manager_dynamic[index].pid);
 				c_timer_manager_dynamic.at(index).run_state = true;
 				return c_timer_manager_dynamic[index].pid;
 			}
@@ -212,7 +214,7 @@ pthread_t c_timer_task_opt::realy_timer_start(bool timer_on_off,unsigned int ind
 		if((c_timer_manager_dynamic.at(index).timer_on_off == false) && c_timer_manager_dynamic.at(index).run_state == true)
 		{
 			//pthread_kill(property_info.pid, SIGKILL);
-			std::cout << "***线程killed！***\n";
+			std::cout << "***线程pid " << c_timer_manager_dynamic.at(index).pid << " killed！***\n";
 			pthread_cancel(c_timer_manager_dynamic.at(index).pid);
 			c_timer_manager_dynamic.at(index).run_state = false;
 			return 0;
@@ -226,7 +228,11 @@ void c_timer_task_opt::remove_timer(c_timer_manager_t &timer_stuct)
 {
 	it = c_timer_manager_dynamic.begin();
 	int index = 0;
-	if(timer_stuct.pid == 0)return;
+	if(timer_stuct.pid == 0)
+	{
+		std::cout << "The pthread is no exist\n";
+		return;
+	}
 	for(;it != c_timer_manager_dynamic.end();)
 	{
 		if(it->pid == timer_stuct.pid){
@@ -237,12 +243,13 @@ void c_timer_task_opt::remove_timer(c_timer_manager_t &timer_stuct)
 			std::cout << "The pthread is Erase！\n";
 			return;
 		}
-		else{
+		else
+		{
 			//迭代器指向下一个元素位置
 			++it;
 			++index;
 		}
 	  }
-	std::cout << "can't remove the pthread no exist\n";
+	std::cout << "can't remove the pthread is not exist\n";
 //	c_timer_manager_dynamic.erase(remove(c_timer_manager_dynamic.begin(), c_timer_manager_dynamic.end(), pf), c_timer_manager_dynamic.end());//删除vector中所有值为pf的元素
 }

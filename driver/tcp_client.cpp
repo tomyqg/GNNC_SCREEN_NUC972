@@ -20,6 +20,7 @@ extern "C" {
 #include <unistd.h>
 #include <signal.h>
 #include <pthread.h>
+#include <fcntl.h>
 #include "tcp_client.h"
 #include <netinet/tcp.h>//keep_alive
 #include "modbus_opt.h"
@@ -35,6 +36,7 @@ static int tcp_discard(circular_buffer *cb);
 static void tcp_client_sig_hander(int signo);
 static void tcp_client_cleanup(void);
 static void socket_connect(void);
+static int set_tcp_keepAlive(int fd, int start, int interval, int count);
 //static int tcp_client_rx_test(int fd,circular_buffer *cb, int len);
 
 static void* tcp_connect_start_loop(void* data);
@@ -42,7 +44,6 @@ static void call_c_timer_tcp_task(c_timer_task_opt *timer ,c_timer_manager_t *ta
 static int switch_tcp_server(void);
 
 volatile int sockfd = -1;
-
 
 c_timer_manager_t tcp_connect_start =
 {
@@ -59,7 +60,7 @@ static void* tcp_connect_start_loop(void* data) {
 	circular_buffer *cb = (circular_buffer *)(data);
 
 	signal(SIGKILL,tcp_client_sig_hander);
-	struct timeval now;
+//	struct timeval now;
     int  fs_sel;
 	fd_set fs_read;
 
@@ -68,10 +69,10 @@ static void* tcp_connect_start_loop(void* data) {
 	FD_SET(sockfd,&fs_read);//将一个文件描述符加入文件描述符集中
 	while(1)
 	{
-		printf("is running\n");
-		gettimeofday(&now, NULL);
-		now.tv_sec += 3;
-		now.tv_usec += (30*1000);//不能超过1秒
+//		printf("is running\n");
+//		gettimeofday(&now, NULL);
+//		now.tv_sec += 3;
+//		now.tv_usec += (30*1000);//不能超过1秒
 		FD_ZERO(&fs_read);//清除一个文件描述符集
 		FD_SET(sockfd,&fs_read);//将一个文件描述符加入文件描述符集中
 //		fs_sel = select(sockfd+1,&fs_read,NULL,NULL,&now);//返回准备好的文件描述符的数目　０超时　－１出错
@@ -82,7 +83,7 @@ static void* tcp_connect_start_loop(void* data) {
 			{
 				printf("Buffer will overflow , discard!\n");//数据溢出
 				tcp_discard(cb);
-				continue;//丢弃一次记录后，退出本次if，若达到条件再次进入
+				continue;
 			}
 			tcp_client_rx(sockfd,cb,TCP_RX_ONE_TIME);//256字节
 			printf("TCP_Rec:data...\n");
@@ -111,7 +112,11 @@ static void tcp_client_sig_hander(int signo)
 }
 static void tcp_client_cleanup(void)
 {
-	close(sockfd);//关闭socket
+	if(sockfd > 0)
+	{
+		close(sockfd);//关闭socket
+		sockfd = -1;
+	}
 }
 /* tcp发送 */
 int tcp_client_tx(int fd,unsigned char* msg , int len)
@@ -130,6 +135,8 @@ int tcp_client_tx(int fd,unsigned char* msg , int len)
 /* tcp接收 */
 static int tcp_client_rx(int fd,circular_buffer *cb, int len)
 {
+//	struct timeval now;
+//	gettimeofday(&now, NULL);
 	uint32_t size = 0;
 	uint32_t read_len = len;
 	/*此次存入的实际大小，取 剩余空间 和 目标存入数量  两个值小的那个*/
@@ -148,10 +155,9 @@ static int tcp_client_rx(int fd,circular_buffer *cb, int len)
 		}
 		printf("Reconnect　TCP．．．! \n");
 		GNNC_DEBUG_INFO("Reconnect　TCP．．．!");//调试用
-//		close(sockfd);
-		cbClear(cb);
+		tcp_client_cleanup();
 		//与主机乱开连接 ，尝试重新连接TCP 并换为 独立运行模式
-//		par_set_uart_mode(REC_NOT_THROUGH_MODE);
+		par_set_uart_mode(REC_NOT_THROUGH_MODE);
 		socket_connect();
 		sleep(1);
 	}
@@ -165,7 +171,9 @@ static int tcp_client_rx(int fd,circular_buffer *cb, int len)
 		}
 		printf("FD:%d->write_offset:%d,read_offset:%d\n",fd,cb->write_offset,cb->read_offset);
 		cb->write_offset += count;//写入的数据统计=读取的数据长度+初始分配地址    是个全局变量 假设发送0-5数据地址=则长度为6个字节 6作为下一次写入地址起始位OK
+//		printf( "socket记录时间%lds，%ldms\n",now.tv_sec,now.tv_usec/1000);
 	}
+
 	return count ;
 }
 
@@ -184,6 +192,8 @@ static void socket_connect(void)
         return;
     }
 
+    set_tcp_keepAlive(sockfd, 2, 3, 2);
+
     memset(&servaddr, 0, sizeof(servaddr));
     servaddr.sin_family = AF_INET;
     servaddr.sin_port = htons(port_num);//转为网络字节
@@ -196,6 +206,10 @@ static void socket_connect(void)
         printf("connect error: %s(errno: %d)\n",strerror(errno),errno);
         return;
     }
+    //设置非阻塞
+    int val = 0;
+    val = fcntl(sockfd, F_GETFL, 0);
+    fcntl(sockfd, F_SETFL, val | O_NONBLOCK);
     GNNC_DEBUG_INFO("connected　TCP  OK!");//调试用
 }
 
@@ -261,7 +275,7 @@ void tcp_connect_start_init(void)
  * count:探测次数，即将几次探测失败判定为TCP断开
  */
 
-int set_tcp_keepAlive(int fd, int start, int interval, int count)
+static int set_tcp_keepAlive(int fd, int start, int interval, int count)
 {
     int keepAlive = 1;
     if (fd < 0 || start < 0 || interval < 0 || count < 0) return -1;  //入口参数检查 ，编程的好习惯。
@@ -289,6 +303,40 @@ int set_tcp_keepAlive(int fd, int start, int interval, int count)
         perror("setsockopt");
         return -1;
     }
+    //设置close后不等待强制关闭
+//    int reuse=0;
+//    setsockopt(fd,SOL_SOCKET ,SO_REUSEADDR,(const char*)& reuse,sizeof(int));
+    //一般不会立即关闭而经历TIME_WAIT的过程
+//    int reuse=1;
+//    setsockopt(fd,SOL_SOCKET ,SO_REUSEADDR,(const char*)& reuse,sizeof(int));
+    //设置发送时限
+//    int nNetTimeout=1000; // 1秒
+//    // 发送时限
+//    setsockopt(socket，SOL_S0CKET, SO_SNDTIMEO，(char *)&nNetTimeout,sizeof(int));
+//    // 接收时限
+//    setsockopt(socket，SOL_S0CKET, SO_RCVTIMEO，(char *)&nNetTimeout,sizeof(int));
+    //设置socket缓冲区 默认的状态发送和接收一次为8688字节 在实际的过程中发送数据和接收数据量比较大，可以设置socket缓冲区，而避免了send(),recv()不断的循环收发
+    // 接收缓冲区
+//    int nRecvBuf=32*1024; // 设置为32K
+//    setsockopt(s,SOL_SOCKET,SO_RCVBUF,(const char*)&nRecvBuf,sizeof(int));
+//    // 发送缓冲区
+//    int nSendBuf=32*1024; // 设置为32K
+//    setsockopt(s,SOL_SOCKET,SO_SNDBUF,(const char*)&nSendBuf,sizeof(int));
+    //希望不经历由系统缓冲区到socket缓冲区的拷贝而影响程序的性能
+//    int nZero=0;
+//    setsockopt(socket，SOL_SOCKET,SO_SNDBUF，(char *)&nZero,sizeof(int));
+    //同上在recv()完成上述功能(默认情况是将socket缓冲区的内容拷贝到系统缓冲区)
+//    int nZero=0;
+//    setsockopt(socket，SOL_SOCKET,SO_RCVBUF，(char *)&nZero,sizeof(int));
+    //一般在发送UDP数据报的时候，希望该socket发送的数据具有广播特性
+//    int bBroadcast = 1;
+//    setsockopt(s, SOL_SOCKET, SO_BROADCAST, (const char*)&bBroadcast, sizeof(int));
+    //延迟接收 就是当接收到第一个数据之后，才会创建连接。对于像http这类非交互式的服务器，这个很有意义，可以防御空连接攻击
+    /*打开这个功能后，内核在val时间之类还没有收到数据，不会继续唤醒进程，而是直接丢弃连接。
+	从三次握手上讲，就是设置这个状态之后，就算完成了三次握手，服务器socket状态也不是ESTABLISHED，
+	而依然是 SYN_RCVD，不会去接收数据*/
+//    int val = 5;
+//    setsockopt(fd, SOL_TCP, TCP_DEFER_ACCEPT, &val, sizeof(val));
     return 0;
 }
 

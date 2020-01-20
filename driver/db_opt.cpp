@@ -23,7 +23,7 @@ extern "C" {
 //--------------------------database_SQL----------------------------------------
 
 sqlite3* db = NULL;
-const char* file_database_path = "/dev/shm/GNNC_Device_info.db";
+const char* file_database_path = "/root/GNNC_Device_info.db";
 const char* sql_query_data = "SELECT count(*) FROM sqlite_master device_info WHERE type='table' AND name='device_info';";
 
 //为通道０－９清空表数据
@@ -56,7 +56,7 @@ const char* device_tab_name_list[DEVICE_TAB_COUNT_NUM+1] =
 /*
  * 参数：　表名，唯一关键字段
  * */
-const char* sql_create_data = "CREATE TABLE IF NOT EXISTS %s(sequence_num UNSIGNED ,channel_num UNSIGNED ,%s UNSIGNED PRIMARY KEY,report_period UNSIGNED ,value_H INTEGER ,value_L INTEGER ,state INTEGER);";
+const char* sql_create_data = "CREATE TABLE IF NOT EXISTS %s(sequence_num UNSIGNED PRIMARY KEY,channel_num UNSIGNED ,%s UNSIGNED ,report_period UNSIGNED ,value_H INTEGER ,value_L INTEGER ,state INTEGER);";
 
 //建立数据
 /*
@@ -70,6 +70,7 @@ const char* sql_insert_data = "INSERT OR REPLACE INTO MAIN.%s VALUES('%d', '%d',
  * */
 const char* sql_delete_data = "DELETE FROM MAIN.%s WHERE state = %d;";//属于离线踢出
 
+//const char* sql_mantai"vacuum;"
 //未使用
 /*更新记录*/
 const char* sql_update_data_time_field = "UPDATE MAIN.device_info SET update_time = %ld where sequence_num = %d AND channel_num = %d;";//更新记录时间
@@ -182,8 +183,13 @@ static int filedb_create(const char* device_tab_name)
 	{
 		fprintf(stderr, "can't open database:%s\n", sqlite3_errmsg(db));
 		GNNC_DEBUG_INFO("can't open database:%s", sqlite3_errmsg(db));
+		sqlite3_free(errMsg);
 		sqlite3_close(db);
 		return -1;
+	}
+	if(errMsg != NULL)
+	{
+		sqlite3_free(errMsg);
 	}
 	GNNC_DEBUG_INFO("Open database【%s】Successful！",file_database_path);//调试用
 	snprintf(sqlcmd, sizeof(sqlcmd), sql_create_data,device_tab_name,"update_time");
@@ -194,8 +200,13 @@ static int filedb_create(const char* device_tab_name)
 	if(SQLITE_OK != rc)
 	{
 		fprintf(stderr, "can't create file database :%s\n", errMsg);
+		sqlite3_free(errMsg);
 		sqlite3_close(db);
 		return -1;
+	}
+	if(errMsg != NULL)
+	{
+		sqlite3_free(errMsg);
 	}
 //	GNNC_DEBUG_INFO("Create table【%s】Successful！",file_database_path);//调试用
 	snprintf(sqlcmd, sizeof(sqlcmd), sql_empty_data,device_tab_name);
@@ -206,8 +217,13 @@ static int filedb_create(const char* device_tab_name)
 	if(SQLITE_OK != rc)
 	{
 		fprintf(stderr, "can't empty file database :%s\n", errMsg);
+		sqlite3_free(errMsg);
 		sqlite3_close(db);
 		return -1;
+	}
+	if(errMsg != NULL)
+	{
+		sqlite3_free(errMsg);
 	}
 	return 0;
 }
@@ -232,9 +248,13 @@ int record_insert(const char* device_tab_name,int channel ,long int timestamp ,d
 	if (SQLITE_OK != rc)
 	{
 		fprintf(stderr, "can't add record to memory database, sqlcmd=%s, err:%s\n", sqlcmd, errMsg);
+		sqlite3_free(errMsg);
 		return -1;
 	}
-
+	if(errMsg != NULL)
+	{
+		sqlite3_free(errMsg);
+	}
 	return 0;
 }
 /*更新设备上报周期*/
@@ -255,9 +275,13 @@ int record_update_report_period(const char *device_tab_name ,int channel,db_devi
 	if (SQLITE_OK != rc)
 	{
 		fprintf(stderr, "can't update record to memory database, sqlcmd=%s, err:%s\n", sqlcmd, errMsg);
+		sqlite3_free(errMsg);
 		return -1;
 	}
-
+	if(errMsg != NULL)
+	{
+		sqlite3_free(errMsg);
+	}
 	return 0;
 }
 
@@ -279,9 +303,13 @@ int record_update_state(const char *device_tab_name,int channel ,db_device_tab_t
 	if (SQLITE_OK != rc)
 	{
 		fprintf(stderr, "can't update record to memory database, sqlcmd=%s, err:%s\n", sqlcmd, errMsg);
+		sqlite3_free(errMsg);
 		return -1;
 	}
-
+	if(errMsg != NULL)
+	{
+		sqlite3_free(errMsg);
+	}
 	return 0;
 }
 
@@ -299,9 +327,14 @@ int record_delete(const char *device_tab_name ,int channel)
 	if (SQLITE_OK != rc)
 	{
 		fprintf(stderr, "can't delete record %s\n", errMsg);
+		sqlite3_free(errMsg);
 		return -1;
 	}
-
+	if(errMsg != NULL)
+	{
+		sqlite3_free(errMsg);
+	}
+//	sqlite3_close(db);
 	return 0;
 }
 
@@ -326,9 +359,16 @@ static int record_query(const char *device_tab_name ,long int current_time ,int 
 		rc = sqlite3_get_table(db, sqlcmd, &pRecord, &row, &column, &errMsg);//得到一維數組pRecord，此数据符合：记录的时间《=最迟记录时间 也就是迟于允许时间
 		if (SQLITE_OK != rc) {
 			fprintf(stderr, "can't get table %s\n",  errMsg);
+			sqlite3_free(errMsg);
 			return -1;
 		}
+		if(errMsg != NULL)
+		{
+			sqlite3_free(errMsg);
+		}
 		pf(pRecord,row,column);//调用alarm process_query_result，带入一维数组数据
+		sqlite3_free_table(pRecord);
+//		sqlite3_close(db);
     }
 
 	return 0 ;
@@ -348,9 +388,13 @@ int time_field_update(int addr, long int timestamp)
 	if (SQLITE_OK != rc)
 	{
 		fprintf(stderr, "cat't update record %s\n", errMsg);
+		sqlite3_free(errMsg);
 		return -1;
 	}
-
+	if(errMsg != NULL)
+	{
+		sqlite3_free(errMsg);
+	}
 	return 0;
 }
 
@@ -370,9 +414,13 @@ int update_table_data(const char *device_tab_name ,long int timestamp ,int chann
 	if (SQLITE_OK != rc)
 	{
 		fprintf(stderr, "cat't update record %s\n", errMsg);
+		sqlite3_free(errMsg);
 		return -1;
 	}
-
+	if(errMsg != NULL)
+	{
+		sqlite3_free(errMsg);
+	}
 	return 0;
 }
 
@@ -399,9 +447,16 @@ int record_query_up_time_region(const char *device_tab_name ,long int current_ti
 		rc = sqlite3_get_table(db, sqlcmd, &pRecord, &row, &column, &errMsg);
 		if (SQLITE_OK != rc) {
 			fprintf(stderr, "can't get table %s\n",  errMsg);
+			sqlite3_free(errMsg);
 			return -1;
 		}
+		if(errMsg != NULL)
+		{
+			sqlite3_free(errMsg);
+		}
 		pf(pRecord,row,column);//调用process_query_math 带入一维数组数据
+		sqlite3_free_table(pRecord);
+//		sqlite3_close(db);
     }
 
 	return 0 ;
@@ -425,9 +480,16 @@ static int record_query_time_region(const char *device_tab_name ,long int curren
 		rc = sqlite3_get_table(db, sqlcmd, &pRecord, &row, &column, &errMsg);
 		if (SQLITE_OK != rc) {
 			fprintf(stderr, "can't get table %s\n",  errMsg);
+			sqlite3_free(errMsg);
 			return -1;
 		}
+		if(errMsg != NULL)
+		{
+			sqlite3_free(errMsg);
+		}
 		pf(pRecord,row,column);//调用process_query_math 带入一维数组数据
+		sqlite3_free_table(pRecord);
+//		sqlite3_close(db);
     }
 
 	return 0 ;
@@ -545,13 +607,15 @@ void* status_minitor(void* data)
 		for(int i = 1; i < DEVICE_TAB_COUNT_NUM+1; i++)
 		{
 			//查询离线
-			if(time_count % 10)
+			if(!(time_count % 10))
 			{
+				GNNC_DEBUG_INFO("查询通道%d状态，时间%d",i,time_count);
 				record_query(device_tab_name_list[i],time((time_t *)NULL ),i ,process_query_result);//查询
 			}
 			//查询最大,最小,平均
-			if(time_count % 2)
+			if(!(time_count % 2))
 			{
+				GNNC_DEBUG_INFO("查询通道%d最大值，时间%d",i,time_count);
 				record_query_time_region(device_tab_name_list[i],time((time_t *)NULL ),i ,process_query_math);
 			}
 		}
@@ -560,6 +624,15 @@ void* status_minitor(void* data)
 	return NULL;
 }
 
+/*数据未有答复立即清空数据信息*/
+void device_info_clear(uint8_t channel_num)
+{
+	//如果数据不为空，则清除
+	if(gnnc_device_v_info[channel_num].device_id_L != 0)
+	{
+		memset(&gnnc_device_v_info[channel_num],0,sizeof(gnnc_device_v_info[channel_num]));
+	}
+}
 //-----------------------------Alarm——end---------------------------------------
 
 

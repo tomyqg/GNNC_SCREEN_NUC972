@@ -40,11 +40,14 @@ int GNNC_get_config_size(const char *module_name);
 /*
  * 串口参数设置
  * */
-volatile uint16_t uart_mode = REC_THROUGH_MODE;//REC_THROUGH_MODE;//配置全局透传模式
+volatile uint16_t uart_mode = REC_NOT_THROUGH_MODE;//配置独立模式
 
 const char * config_file_path = "/root/GNNC_cnf.ini";
 
-
+/*
+ * 软件版本信息
+ * */
+char software_ver[64] = "v1.0.0_2020.1.18";
 /*
  * 工装板名称配置
  * */
@@ -52,7 +55,7 @@ char board_name[64] = "GNNC_Factory";
 /*
  *TCP_Client参数设置
  * */
-char server_ip[16] = "192.168.1.37";
+char server_ip[32] = "192.168.1.37";
 uint16_t port_num = 50000;
 
 /*
@@ -112,6 +115,7 @@ void GNNC_init_config(void)
 			exit(errno); /* 读文件错误直接按照错误码退出 */
 		}
 		root = cJSON_CreateObject();
+		cJSON_AddStringToObject(root,"software_ver",software_ver);
 		cJSON_AddStringToObject(root,"board_name",board_name);
 		cJSON_AddNumberToObject(root,"port_num",port_num);
 		cJSON_AddStringToObject(root,"serverip",server_ip);
@@ -150,6 +154,9 @@ static void starup_read_config(void)
 	char parameter_cmd[32];
 	int uart_mode_temp = 0;
 	int report_cycle_temp = 0;
+    sprintf(parameter_cmd,"%s","software_ver");
+    GNNC_read_config(parameter_cmd,software_ver,para_string);//读取软件版本信息
+
     sprintf(parameter_cmd,"%s","serverip");
     GNNC_read_config(parameter_cmd,server_ip,para_string);//读取配置服务器ip配置
 
@@ -252,6 +259,7 @@ int pat_set_board_name(char *name)
 	if(strcmp(board_name,temp_board))
 	{
 		sprintf(board_name,"%s",name);
+		GNNC_DEBUG_INFO("切换board name[%s]",board_name);
 		GNNC_midfield_config(parameter_cmd,board_name,para_string);
 		return 0;//刷新显示
 	}
@@ -275,9 +283,10 @@ uint8_t par_set_uart_mode(unsigned char mode)
 	{
 		sprintf(parameter_cmd,"uart_mode");
 		GNNC_midfield_config(parameter_cmd,&mode_temp,para_int);
-		uart_mode = mode;
-		printf("改模式-当前模式：%d\n",uart_mode);
-		return switch_running_mode(uart_mode);
+
+		printf("改模式-当前模式：%d\n",mode_temp);
+		GNNC_DEBUG_INFO("切换uart mode[%d]",mode_temp);
+		return switch_running_mode(mode);
 	}
 	printf("未修改模式-当前模式：%d\n",uart_mode);
 	return 0;
@@ -293,6 +302,7 @@ int pat_set_tcp_server(char *ip_addr)
 		sprintf(parameter_cmd,"serverip");
 		sprintf(server_ip,"%s",ip_addr);
 		GNNC_midfield_config(parameter_cmd,server_ip,para_string);
+		GNNC_DEBUG_INFO("切换tcp ip[%s]",server_ip);
 		return socket_force_reconnect();
 	}
 	return -1;
@@ -307,7 +317,7 @@ int pat_set_tcp_server_port(uint16_t port)
 		sprintf(parameter_cmd,"port_num");
 		port_num = port;
 		GNNC_midfield_config(parameter_cmd,&port_num,para_int);
-		printf("port_num = %u\n",port_num);
+		GNNC_DEBUG_INFO("切换tcp port[%u]",port_num);
 		return socket_force_reconnect();
 	}
 	return -1;
@@ -326,6 +336,7 @@ int par_set_mqtt_server(char *ip_addr)
 		{
 			sprintf(mqtt_server,"%s",ip_addr);
 			GNNC_midfield_config(parameter_cmd,mqtt_server,para_string);
+			GNNC_DEBUG_INFO("切换mqtt server[%s]",mqtt_server);
 			return switch_mqtt_server();
 		}
 		else
@@ -345,6 +356,7 @@ int par_set_mqtt_client_id(char *id)
 		sprintf(parameter_cmd,"mqtt_client_id");
 		sprintf(mqtt_client_id,"%s",id);
 		GNNC_midfield_config(parameter_cmd,mqtt_client_id,para_string);
+		GNNC_DEBUG_INFO("切换mqtt id[%s]",mqtt_client_id);
 		return switch_mqtt_server();
 	}
 	return -1;
@@ -359,6 +371,7 @@ int par_set_mqtt_client_user(char *user)
 		sprintf(parameter_cmd,"mqtt_user");
 		sprintf(mqtt_user,"%s",user);
 		GNNC_midfield_config(parameter_cmd,mqtt_user,para_string);
+		GNNC_DEBUG_INFO("切换mqtt用户名[%s]",mqtt_user);
 		return switch_mqtt_server();
 	}
 	return -1;
@@ -421,6 +434,7 @@ int par_set_mqtt_report_cycle(uint16_t cycle ,uint8_t channel_num)
 		sprintf(parameter_cmd,"mqtt_report_cycle_channel%u",channel_num);
 		GNNC_midfield_config(parameter_cmd,&interval,para_int);
 		gnnc_device_v_info[channel_num].report_period = (interval&0xFFFF);
+		GNNC_DEBUG_INFO("设置mqtt report cycle[%d]",interval);
 		printf("改通道%u周期-当前周期：%d\n",channel_num ,gnnc_device_v_info[channel_num].report_period);
 		return 0;
 	}
@@ -458,7 +472,6 @@ int GNNC_read_config(char *identifier,void *value,para_data_type_t data_type)
 			strcat(str,txt);//拼接字符串
 		} /* end SNAI_strip_comments */
 	}
-//	printf("配置文件大小:\%dByte\n",strlen(str));
 	root = cJSON_Parse(str);
 	cJSON *item = cJSON_GetObjectItem(root,identifier);
 	switch(data_type)
@@ -573,14 +586,12 @@ int GNNC_midfield_config(char *identifier,void *value,para_data_type_t data_type
 	char *out = cJSON_Print(root);
 	fprintf(fp,"%s",out);
 	fclose(fp);//关闭才保存
-//	printf("关闭文件！\n");
 	GNNC_DEBUG_INFO("修改后获取配置文件：%s",out);
 	cJSON_free(out);
 	if (NULL != root)
 	{
 		cJSON_Delete(root);
 	}
-//	printf("释放！\n");
 	return 0;
 }
 
@@ -602,8 +613,12 @@ static void cJSON_add_string_to_object(cJSON * const object, const char * const 
     // item exist
     else
     {
-        cJSON_free(item->valuestring); // free present valuestring
-        item->valuestring = strdup(string); // malloc and init new valuestring
+    	cJSON_ReplaceItemInObject(object,name,cJSON_CreateString(string));
+//    	GNNC_DEBUG_INFO("修改配置文件：%s",item->valuestring);
+//        cJSON_free(item->valuestring); // free present valuestring
+//        GNNC_DEBUG_INFO("释放");
+//        item->valuestring = strdup(string); // malloc and init new valuestring
+//        GNNC_DEBUG_INFO("新配置文件：%s",item->valuestring);
     }
 }
 

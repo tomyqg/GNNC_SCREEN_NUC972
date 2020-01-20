@@ -18,10 +18,6 @@ extern "C" {
 #define UART_SEND_BUFF_MAX  256
 #define UART_NUM_MAX		10
 
-//extern int file_id_1;//串口ttyS6
-
-
-extern int file_id[];
 
 typedef struct circular_buffer {
     void *ptr;
@@ -39,7 +35,6 @@ uint32_t CQ_get_buff_Data(circular_buffer *cb, uint8_t *targetBuf, uint32_t len)
 
 circular_buffer *cb_create(char *path,unsigned long order);
 
-
 int usart_init(void);
 void usart_cleanup(void);
 int usart_tx(int fd,unsigned char* msg , int len);
@@ -47,16 +42,8 @@ int usart_rx(int fd,circular_buffer *cb, int len);
 int usart_discard(circular_buffer *cb);
 void usart_sig_hander(int signo);
 
-void* usart1_rx_start(void* data);
-void* usart2_rx_start(void* data);
-void* usart3_rx_start(void* data);
-void* usart4_rx_start(void* data);
-void* usart5_rx_start(void* data);
-void* usart6_rx_start(void* data);
-void* usart7_rx_start(void* data);
-void* usart8_rx_start(void* data);
-void* usart9_rx_start(void* data);
-void* usart10_rx_start(void* data);
+void* usart_rx_start(void* data);
+
 
 /*对外切换串口运行模式接口*/
 uint8_t switch_running_mode(uint8_t mode);

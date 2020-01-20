@@ -22,8 +22,18 @@ typedef struct db_device
 {
 	uint16_t device_count_num;//每个通道设备记录数目　　０－９
 	uint16_t report_period;//每个通道设备上报周期
-	uint16_t current_value_H;//每个通道设备当前值H
+	uint16_t current_channel_state_H;//每个通道状态
+	uint16_t current_channel_state_L;//每个通道状态
+	uint16_t current_consisitence_int_H;//每个通道浓度整形
+	uint16_t current_consisitence_int_L;
+	uint16_t current_consisitence_float_H;//每个通道浓度浮点
+	uint16_t current_consisitence_float_L;
+	uint16_t current_value_H;//每个通道设备当前值H gas ad
 	uint16_t current_value_L;//每个通道设备当前值L
+	uint16_t current_temp_int_H;//每个通道温度整形
+	uint16_t current_temp_int_L;
+	uint16_t current_temp_ad;//每个通道温度AD值
+	uint16_t device_type;
 	long long max_value;//每个通道设备记录的最大值
 	long long min_value;//每个通道设备记录的最小值
 	long long average_value;//每个通道设备记录的平均值
@@ -60,7 +70,8 @@ int record_update_report_period(const char *device_tab_name ,int channel,db_devi
 //更新设备状态
 int record_update_state(const char *device_tab_name,int channel ,db_device_tab_t *device_tab);
 
-
+/*清空暂存数据信息*/
+void device_info_clear(uint8_t channel_num);
 //删除表-暂未使用
 int record_delete(const char *device_tab_name ,int channel);
 

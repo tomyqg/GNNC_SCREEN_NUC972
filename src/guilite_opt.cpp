@@ -155,4 +155,5 @@ void *guilite_display_opt(void *data)
 	gui_hardware_info_t *gui_data = (gui_hardware_info_t *)data;
 	/*将内存映射的操作地址，获取到的实际屏幕XY 参数和颜色深度传递*/
 	start_GUILite(gui_data->phy_fb, gui_data->screen_width, gui_data->screen_height, gui_data->color_bytes, NULL);//never return;
+	return NULL;
 }

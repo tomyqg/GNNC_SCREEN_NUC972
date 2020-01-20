@@ -35,7 +35,7 @@ CPP_DEPS += \
 src/%.o: ../src/%.cpp
 	@echo 'Building file: $<'
 	@echo 'Invoking: Cross G++ Compiler'
-	arm-none-linux-gnueabi-g++ -DUSE_EPOLL -DUSE_OLD_CQ -DENABLE_DB_DEBUG=0 -I"/home/aron566/eclipse-workspace/GNNC_SCREEN/include" -I"/home/aron566/eclipse-workspace/GNNC_SCREEN/lib/mosquitto/include" -I"/home/aron566/eclipse-workspace/GNNC_SCREEN/lib/lib_ssl/include" -I"/home/aron566/eclipse-workspace/GNNC_SCREEN/lib/lib_sqlite3/include" -I"/home/aron566/eclipse-workspace/GNNC_SCREEN/lib/lib_mysql/include" -O0 -g3 -Wall -c -fmessage-length=0 -std=c++11 -mfloat-abi=soft -MMD -MP -MF"$(@:%.o=%.d)" -MT"$(@)" -o "$@" "$<"
+	arm-none-linux-gnueabi-g++ -DUSE_EPOLL -DENABLE_MODBUS_DEBUG=0 -DUSE_OLD_CODE=0 -DUSE_OLD_CQ -DENABLE_DB_DEBUG=0 -DUSE_TCP_SEQUENS_NUM=1 -I"/home/aron566/eclipse-workspace/GNNC_SCREEN/include" -I"/home/aron566/eclipse-workspace/GNNC_SCREEN/lib/mosquitto/include" -I"/home/aron566/eclipse-workspace/GNNC_SCREEN/lib/lib_ssl/include" -I"/home/aron566/eclipse-workspace/GNNC_SCREEN/lib/lib_sqlite3/include" -I"/home/aron566/eclipse-workspace/GNNC_SCREEN/lib/lib_mysql/include" -O0 -g3 -Wall -c -fmessage-length=0 -std=c++11 -mfloat-abi=soft -MMD -MP -MF"$(@:%.o=%.d)" -MT"$(@)" -o "$@" "$<"
 	@echo 'Finished building: $<'
 	@echo ' '
 

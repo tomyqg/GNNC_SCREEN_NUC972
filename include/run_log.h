@@ -24,6 +24,7 @@ extern "C" {
 int GNNC_log_init(void);
 void GNNC_log_ww(char *str);
 char *GNNC_get_timestamp(char *buf, int len, time_t cur_time);
+int cat_mmp(void);
 extern char GNNC_TEMP_log[];
 extern char GNNC_LOG_File_TIME[];
 extern int GNNC_Origin_Day;

@@ -13,6 +13,10 @@ extern "C" {
 #include <string.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <linux/unistd.h>     /* 包含调用 _syscallX 宏等相关信息*/
+#include <linux/kernel.h>     /* 包含sysinfo结构体信息*/
+#include <sys/sysinfo.h>
+#include <linux/sysinfo.h>
 #include <fcntl.h>
 #include "run_log.h"
 
@@ -73,7 +77,30 @@ void GNNC_log_ww(char *str)
 	}
 }
 
+int cat_mmp(void)
+{
+	struct sysinfo s_info;
+	int error;
 
+	error = sysinfo(&s_info);
+	GNNC_DEBUG_INFO("<<<Uptime = %lds>>>" "RAM: |total %lu|used = %lu|free = %lu",
+			s_info.uptime,
+			s_info.totalram/1024,(s_info.totalram/1024-s_info.freeram/1024),s_info.freeram/1024);
+	return 0;
+}
+//struct sysinfo {
+//long uptime;
+///* 启动到现在经过的时间 */
+//unsigned long loads[3];
+///* 1, 5, and 15 minute load averages */
+//unsigned long totalram;  /* 总的可用的内存大小 */
+//unsigned long freeram;   /* 还未被使用的内存大小 */
+//unsigned long sharedram; /* 共享的存储器的大小 */
+//unsigned long bufferram; /* 缓冲区大小 */
+//unsigned long totalswap; /* 交换区大小 */
+//unsigned long freeswap;  /* 还可用的交换区大小 */
+//unsigned short procs;    /* 当前进程数目 */
+//char _f[22];         /* 64字节的补丁结构 */
 
 #ifdef __cplusplus //使用ｃ编译
 }

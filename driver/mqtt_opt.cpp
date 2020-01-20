@@ -192,6 +192,7 @@ int demo_publisher()
 
 static void *mqtt_reconnect_poll_loop(void* ptmr)
 {
+	signal(SIGKILL,mqtt_sig_hander);
 	mosquitto_username_pw_set(mosq, mqtt_user, mqtt_key);
     while(1)
     {
