@@ -1356,22 +1356,9 @@ static void broker_rw_message(int channel,uint8_t *ptr,uint16_t msglen)
  * */
 static void broker_send_message_to_slave(int msg_device_addr,uint8_t* msg,int len)
 {
-	switch(msg_device_addr)
+	if(msg_device_addr >= 0x01 && msg_device_addr <= UART_NUM_MAX)
 	{
-		case 0x01:
-		case 0x02:
-		case 0x03:
-		case 0x04:
-		case 0x05:
-		case 0x06:
-		case 0x07:
-		case 0x08:
-		case 0x09:
-		case 0x0A:
-			usart_tx(polling_msg[msg_device_addr].cb->fd ,msg ,len);
-			break;
-		default:
-			break;
+		usart_tx(polling_msg[msg_device_addr].cb->fd ,msg ,len);
 	}
 }
 
